@@ -282,8 +282,14 @@ See [`examples/claude-code-setup.md`](examples/claude-code-setup.md) for the ful
 - **Shipped**: Agent-as-retriever benchmark — LongMemEval-S R@5 = 98.9% on full 500 questions.
 - **Next**: End-to-end QA evaluation on LongMemEval (retrieve → answer → judge), so the project has a comparable accuracy number alongside the retrieval number.
 - **Next**: Cross-benchmark validation — run the same agent harness on LoCoMo and ConvoMem to confirm the pattern generalizes beyond LongMemEval.
+- **Next**: Tiered storage — node states (ACTIVE / SILENT / ARCHIVED / deep-sleep), low-salience memories auto-migrate to an `archived/` subdir. Main `memory.html` stays small; archive is searched only on explicit request. This is what makes multi-year conversation feasible.
+- **Next**: Salience consolidation — Ebbinghaus-style decay where memories that get retrieved/cited/linked decay slower. Currently `effectiveSalience` is flat; this makes "frequently used config" survive years while "yesterday's lunch order" fades naturally.
+- **Next**: Synonym learning quality gate — newly learned synonyms enter `pending` state, promote to `confirmed` only after being retrieved successfully; otherwise discarded after 30 days. Prevents bad synonyms from polluting retrieval.
+- **Next**: Evidence links on knowledge articles — each knowledge fact records which conversation(s) it was distilled from, so a knowledge hit can drill back to verbatim source via `memory_read`.
+- **Next**: LLM budget pools for production — agent loop calls split into critical (user-facing queries) / maintenance (backfill, consolidation) / idle (exploration) buckets, so one heavy query can't starve the rest of the system.
 - **Later**: Lightweight write-time fact extraction (optional, off by default) — a compromise that captures the 2 missed questions without making zero-ingestion-LLM the default mode.
 - **Later**: Production dogfooding — wire the MCP server into Claude Code / Cursor for real-world daily use and measure recall latency / hit rate on actual user queries.
+- **Later**: Multi-file namespaces — partition by month or tag prefix to keep `memory.html` under 5MB even at 100K+ nodes. Parallel ripgrep fan-out, ranked merge.
 
 ## Project structure
 

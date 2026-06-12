@@ -411,7 +411,11 @@ This makes a 3.5-hour full-500 run crash-resumable.
 
 - **Single-shot recall has a semantic-gap ceiling.** `recall("what's my favorite hobby")` won't find a session that says "I love hiking on weekends" without an agent rewriting the query. Mitigated by agent loop; not eliminated.
 - **No write-time fact extraction.** The 2 missed LongMemEval questions are unreachable because the answer is hidden in passing ("by the way, I've been in marketing for 2 years and 4 months") inside a session about an unrelated topic. Bridging this requires LLM extraction at write time, which we don't do.
-- **HTML file doesn't shard.** At very large scale (100K+ memories) a single file becomes a perf bottleneck. Solution would be sharding by tag prefix, not yet implemented.
+- **HTML file doesn't shard.** At very large scale (100K+ memories) a single file becomes a perf bottleneck. Planned: multi-file namespaces with parallel ripgrep fan-out.
+- **Salience decay is flat.** All memories decay at the same rate regardless of how often they're used. Planned: Ebbinghaus-style consolidation where frequently retrieved/cited memories decay slower.
+- **No tiered storage.** All memories live in one file with equal retrieval priority. Planned: ACTIVE / SILENT / ARCHIVED / deep-sleep states, where low-salience memories migrate to an `archived/` subdir and only surface on explicit request.
+- **Synonym learning has no quality gate.** A bad synonym promoted by co-occurrence pollutes retrieval permanently. Planned: pending → confirmed state with retrieval-success requirement.
+- **No drilldown from knowledge to source conversation.** Knowledge articles don't track which conversations they were distilled from. Planned: evidence_links field.
 - **No multi-tenant auth.** Namespaces are isolated by directory; the engine trusts whatever basePath it's given. Authentication is the host's job (HTTP server / MCP transport).
 - **No garbage collection.** Removed articles leave gaps; superseded articles stay in the file (greyed out). A compaction pass would help at scale.
 
