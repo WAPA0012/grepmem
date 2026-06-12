@@ -306,3 +306,7 @@ npm run test:scale # 9 scale tests (100 / 1K / 10K nodes, concurrency)
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Contributing
+
+PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
