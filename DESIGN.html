@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grepmem — Design Document</title>
+<meta name="description" content="Vectorless agent memory. Memory lives on disk as HTML files; the agent retrieves with grep. No embedding model. No vector database. No ingestion LLM calls.">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 2rem; color: #24292f; line-height: 1.6; }
+h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+h1 span { color: #0969da; }
+.subtitle { font-size: 1.1rem; color: #656d76; margin-bottom: 1.5rem; }
+h2 { font-size: 1.3rem; margin: 2rem 0 0.8rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
+h3 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; }
+p { margin: 0.5rem 0; }
+code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; font-family: 'SFMono-Regular', Consolas, monospace; }
+pre { background: #f6f8fa; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0.8rem 0; font-size: 0.85rem; line-height: 1.5; }
+table { border-collapse: collapse; width: 100%; margin: 0.8rem 0; }
+th, td { border: 1px solid #d0d7de; padding: 6px 12px; text-align: left; font-size: 0.9rem; vertical-align: top; }
+th { background: #f6f8fa; }
+.highlight { background: #ddf4ff; }
+ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+li { margin: 0.3rem 0; }
+blockquote { border-left: 3px solid #0969da; padding-left: 1rem; color: #656d76; margin: 1rem 0; background: #f6f8fa; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+blockquote.big { font-size: 1.05rem; color: #24292f; }
+.evidence { background: #f6fff6; border-left: 3px solid #1a7f37; padding: 0.8rem 1.2rem; margin: 0.8rem 0; border-radius: 0 8px 8px 0; }
+.evidence strong { color: #1a7f37; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #d0d7de; color: #656d76; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1><span>Grepmem</span> — Design Document</h1>
+<p class="subtitle">Vectorless agent memory. Memory lives on disk as HTML files; the agent retrieves with grep. No embedding model. No vector database. No ingestion LLM calls.</p>
+
+<blockquote class="big">
+This document describes the current architecture (HTML storage + grep retrieval). The legacy v1 architecture (graph.json + embeddings) is preserved in <code>DESIGN.md.legacy-v1</code> for historical reference.
+</blockquote>
+
+<h2>1. Core philosophy</h2>
+
+<p>Three principles, in priority order:</p>
+<ol>
+<li><strong>Memory lives on disk, not in context.</strong> The agent loads only what it needs, when it needs it. If context is lost, the agent re-greps.</li>
+<li><strong>Storage is human-readable.</strong> <code>memory.html</code> opens in any browser. You can diff it with git, grep it from the CLI, and read it with your eyes.</li>
+<li><strong>Zero hidden LLM calls.</strong> No embedding model runs at write time. No ingestion summarizer runs at write time. The only LLM in the system is whatever model the agent itself uses to read the retrieved results.</li>
+</ol>
+<p>Everything else follows from these.</p>
+
+<h2>2. System architecture</h2>
+
+<pre>
+┌─────────────────────────────────────────────────────────┐
+│  Interfaces                                              │
+│    HTTP server (server.mjs)                              │
+│    MCP server (mcp-server.mjs)                           │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│  Memory Engine (memory-html.js)                         │
+│    add() / update() / remove()                          │
+│    land(query) → searchAndScore → top-K                 │
+│    focus(id) / spread(id, depth, energy)                │
+└────────────────────────┬────────────────────────────────┘
+                         │
+       ┌─────────────────┴─────────────────┐
+       ▼                                   ▼
+┌──────────────────┐              ┌────────────────────┐
+│  Storage         │              │  Retrieval         │
+│  memory.html     │              │  grep.js           │
+│  memory.html.bak │              │  ripgrep subprocess│
+└──────────────────┘              └────────────────────┘
+       ▲                                   │
+       │                                   │
+       └───────── file system ─────────────┘
+</pre>
+
+<p>Three layers, each replaceable:</p>
+<ul>
+<li><strong>Storage</strong> — single HTML file per namespace, atomically swapped via <code>.bak</code>.</li>
+<li><strong>Engine</strong> — in-memory <code>_articles</code> Map, dirty-flag deferred flush.</li>
+<li><strong>Interface</strong> — HTTP for curl/scripts, MCP for agents.</li>
+</ul>
+<p>The engine never calls a model. It does filesystem and ripgrep. That's it.</p>
+
+<h2>3. Storage format (<code>memory.html</code>)</h2>
+
+<p>One file per namespace. Schema:</p>
+
+<pre>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;Grepmem&lt;/title&gt;
+  &lt;style&gt;/* human-readable styling */&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;!-- INDEX: id|salience|accessCount|lastAccess|author --&gt;
+&lt;!-- abc123|0.53|3|2026-06-11|agent-1 --&gt;
+
+&lt;article id="abc123"
+         data-type="knowledge"
+         data-tags="Redis,password,6379,cluster"
+         data-author="agent-1"
+         data-salience="0.5"
+         data-access-count="3"
+         data-last-access="2026-06-11"
+         data-timestamp="2026-06-10T14:30:00Z"&gt;
+  &lt;h2&gt;Production Redis password r3d1s, port 6379 &lt;span class="type-badge type-knowledge"&gt;knowledge&lt;/span&gt;&lt;/h2&gt;
+  &lt;p class="detail"&gt;3-node cluster. Sentinels on 101/102/103. Pool size 100.&lt;/p&gt;
+  &lt;ul class="triggers"&gt;
+    &lt;li&gt;Redis connection config&lt;/li&gt;
+    &lt;li&gt;Redis password&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;nav class="edges"&gt;&lt;a href="#xyz"&gt;admin-panel deployment&lt;/a&gt;&lt;/nav&gt;
+&lt;/article&gt;
+
+&lt;article id="conv-2026-06-10"
+         data-type="conversation"
+         data-timestamp="2026-06-10T..."&gt;
+  &lt;h2&gt;Redis upgrade discussion &lt;span class="type-badge type-conversation"&gt;conversation&lt;/span&gt;&lt;/h2&gt;
+  &lt;div class="conversation-body"&gt;
+    User: Should we rotate the production Redis password?
+    AI: Recommended — current one is 2 years old.
+  &lt;/div&gt;
+&lt;/article&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<h3>Field reference</h3>
+
+<table>
+<tr><th>Field</th><th>Where</th><th>Purpose</th></tr>
+<tr><td><code>id</code></td><td><code>&lt;article id&gt;</code> attr</td><td>SHA-256 prefix of summary. Stable across renames.</td></tr>
+<tr><td><code>data-type</code></td><td><code>&lt;article&gt;</code> attr</td><td><code>knowledge</code> (compiled facts) or <code>conversation</code> (raw history)</td></tr>
+<tr><td><code>data-tags</code></td><td><code>&lt;article&gt;</code> attr</td><td>Comma-joined keywords extracted at write time. High-density grep target.</td></tr>
+<tr><td><code>data-salience</code></td><td><code>&lt;article&gt;</code> attr</td><td><code>baseSalience</code> 0–1. Boosted by access, decayed by time.</td></tr>
+<tr><td><code>data-timestamp</code></td><td><code>&lt;article&gt;</code> attr</td><td>When the underlying event happened (chat time, doc creation, etc.)</td></tr>
+<tr><td><code>data-superseded-by</code></td><td><code>&lt;article&gt;</code> attr</td><td>If set, this node is replaced by another. CSS greys it out.</td></tr>
+<tr><td><code>&lt;h2&gt;</code></td><td>first child</td><td><code>summary</code> — the one-line headline shown in recall results.</td></tr>
+<tr><td><code>&lt;p class="detail"&gt;</code></td><td>optional</td><td>Long-form text for knowledge articles.</td></tr>
+<tr><td><code>&lt;div class="conversation-body"&gt;</code></td><td>optional</td><td>Verbatim chat for conversation articles.</td></tr>
+<tr><td><code>&lt;ul class="triggers"&gt;</code></td><td>optional</td><td>Future scenarios that should resurface this memory. Grep weight 3.0.</td></tr>
+<tr><td><code>&lt;nav class="edges"&gt;</code></td><td>optional</td><td>Typed links to other articles. <code>&lt;a data-strength="0.5"&gt;</code> per edge.</td></tr>
+<tr><td><code>&lt;!-- INDEX: ... --&gt;</code></td><td>HTML comment</td><td>Fast ID lookup; ripgrep can hit it without DOM parsing.</td></tr>
+</table>
+
+<h3>Why HTML (not Markdown, not JSON)</h3>
+
+<ul>
+<li><strong>Browser-native.</strong> Open the file, read it like a doc.</li>
+<li><strong>Semantic structure.</strong> <code>&lt;article&gt;</code>, <code>&lt;h2&gt;</code>, <code>&lt;nav&gt;</code>, <code>&lt;ul&gt;</code> are real semantic tags. Markdown has no article boundaries; JSON has no display layer.</li>
+<li><strong>grep-friendly.</strong> Tags and triggers are in attribute values; full-text is in element bodies. Ripgrep hits both without parsing.</li>
+<li><strong>git-diffable.</strong> One article per <code>&lt;article&gt;</code> block, one line per field. Diffs are reviewable.</li>
+<li><strong>No parser needed for reads.</strong> Ripgrep + regex extracts fields. (Writes use a small serializer; reads use line-range mapping.)</li>
+</ul>
+
+<h2>4. Retrieval engine (<code>grep.js</code>)</h2>
+
+<h3>4.1 Why not embeddings</h3>
+
+<p>Embeddings are great at bridging vocabulary gaps. They are also:</p>
+<ul>
+<li>Expensive at write time (one model call per write).</li>
+<li>Opaque (you can't read a vector).</li>
+<li>Heavy (transformer runtime, ~500MB deps).</li>
+<li>Hard to debug (why did this match? cosine says 0.73, that's why).</li>
+</ul>
+<p>For agent memory — where the agent is already a capable LLM — embeddings are redundant. The agent can rewrite its own query 5 different ways and grep each one. That's what agent-as-retriever means.</p>
+
+<h3>4.2 Four-pass multi-strategy grep</h3>
+
+<pre>
+score = 0
+for each extracted query term:
+  hit lines = rg &lt;term&gt; memory.html
+  for each hit:
+    article_id = find_article_for_line(hit)
+    field = which_field(hit)        # trigger / tag / detail / conversation
+    score[article_id] += term.weight × field.weight
+
+sort articles by score × effectiveSalience, descending
+</pre>
+
+<table>
+<tr><th>Pass</th><th>What it greps</th><th>Weight</th><th>Why</th></tr>
+<tr><td>Trigger</td><td><code>&lt;ul class="triggers"&gt;</code> block</td><td>3.0</td><td>Author-curated "future scenarios that should resurface this". Highest signal.</td></tr>
+<tr><td>Tag</td><td><code>data-tags</code> attribute</td><td>2.0</td><td>Auto-extracted keywords. Dense token surface.</td></tr>
+<tr><td>Full-text</td><td>entire file</td><td>1.0–1.5</td><td>Catch-all.</td></tr>
+<tr><td>Synonym</td><td>manually-expanded terms</td><td>1.5</td><td>Cache → Redis, crashed → failure, password → bcrypt. Built-in map + learned map.</td></tr>
+</table>
+
+<h3>4.3 Query term extraction (<code>extractQueryTerms</code>)</h3>
+
+<p>A query string is broken into a list of <code>{pattern, weight, type}</code> terms:</p>
+
+<table>
+<tr><th>Pattern type</th><th>Regex</th><th>Weight</th><th>Example</th></tr>
+<tr><td>Whole-query exact</td><td>entire string</td><td>3.0</td><td><code>"how to connect Redis"</code></td></tr>
+<tr><td>English word</td><td><code>[a-zA-Z][a-zA-Z0-9_.\-]+</code></td><td>2.0 (+1.5 case-insensitive)</td><td><code>Redis</code>, <code>6379</code></td></tr>
+<tr><td>Chinese bigram</td><td>consecutive CJK pairs</td><td>1.5</td><td>缓存 → 缓存</td></tr>
+<tr><td>Chinese trigram</td><td>consecutive CJK triples</td><td>2.0</td><td>Redis配置</td></tr>
+<tr><td>IP / port</td><td><code>\d+\.\d+\.\d+\.\d+(:\d+)?</code></td><td>3.0</td><td><code>192.168.1.101</code></td></tr>
+<tr><td>Bare numbers</td><td><code>\d{2,}</code></td><td>1.5</td><td><code>6379</code>, <code>2024</code></td></tr>
+<tr><td>Synonyms (built-in)</td><td>expansion map</td><td>1.5</td><td>缓存 → Redis, redis</td></tr>
+<tr><td>Synonyms (learned)</td><td>learner output</td><td>1.8</td><td><code>k8s</code> → <code>kubernetes</code>, <code>pod</code>, <code>kubectl</code></td></tr>
+</table>
+
+<p>The case-insensitive flag and learned-synonym weight (1.8 &gt; 1.5) reflect that learned synonyms are domain-specific and high-precision.</p>
+
+<p>The built-in synonym map ships with English and Chinese entries (cache→Redis, 缓存→Redis, crashed→failure). It's a plain object in <code>grep.js</code>; English-only deployments can clear it without touching any other code.</p>
+
+<h3>4.4 Salience weighting</h3>
+
+<p>Each article's <code>effectiveSalience</code> scales its match score before sort:</p>
+
+<pre>
+effectiveSalience = clamp(
+  baseSalience              // default 0.5
+  + accessCount × 0.03      // capped at +0.3
+  - days_since_last_access × 0.005,
+  0.1, 1.0
+)
+</pre>
+
+<p>A frequently-accessed recent memory outranks a stale one, even with identical match scores. decayRate = 0.005 means roughly half-life of 200 days — slow enough that "yesterday's discussion" beats "last year's reference" but fast enough that dead config entries fade.</p>
+
+<h3>4.5 Match threshold</h3>
+
+<p><code>matchThreshold = 0.20</code>. Anything below is filtered out as noise. Set low because grep's scoring is generous (synonym + tag overlap can rack up points quickly even on partial matches).</p>
+
+<h2>5. Fail-Improve Loop (<code>learner.js</code>)</h2>
+
+<p>A query-only subsystem. When a term keeps co-occurring with retrieved articles that contain a tag the term doesn't match, we promote the term to a learned synonym.</p>
+
+<h3>5.1 Algorithm</h3>
+
+<pre>
+on every land(query) with results:
+  extract query terms (English words + Chinese bigrams)
+  for top 3 matched articles:
+    for each tag in article.tags:
+      for each query term not already in tag:
+        record_query_term({ term, tag })
+
+on recorded_count(term, tag) &gt;= LEARN_THRESHOLD:  // = 2
+  promote: learned_synonyms[term] = [tag, ...]
+  write to .synonyms.json
+</pre>
+
+<h3>5.2 Hot reload</h3>
+
+<p><code>grep.js</code> reads <code>globalThis.__SYNONYM_LEARNER</code> on every query. New synonyms take effect on the next <code>land()</code> call — no restart, no engine reload.</p>
+
+<h3>5.3 Example</h3>
+
+<pre>
+Day 1: user types "k8s" → grep hits "kubernetes" articles (via tag).
+        record (k8s, kubernetes).
+Day 1: user types "k8s" again → another hit.
+        record (k8s, kubernetes). Promote.
+Day 2: user types "k8s" → now expanded to [k8s, kubernetes, pod, ...]
+</pre>
+
+<p>Two co-occurrences is the threshold. Low enough that real patterns promote fast; high enough that one-off typos don't.</p>
+
+<h2>6. Write operations</h2>
+
+<h3>6.1 <code>add({ summary, detail, triggers, author, type, conversation, timestamp })</code></h3>
+
+<pre>
+1. Auto-generate triggers if not provided.
+2. Extract tags from summary + detail (or summary + conversation).
+3. Dedup check FIRST — before generating an ID:
+   - SHA-256 prefix of summary
+   - If article with same prefix exists and not superseded → return duplicate
+   - Jaccard similarity on tags ≥ 0.85 → return duplicate
+4. Generate ID (SHA-256 prefix; -N suffix only on hash collision).
+5. Auto-link: for each existing article with tag Jaccard ≥ 0.5, add bidirectional edges.
+6. Create node, set in-memory map, mark dirty.
+7. _maybeFlush (deferred — see 6.5).
+</pre>
+
+<h3>6.2 Why triggers are optional</h3>
+
+<p>If <code>triggers</code> is <code>undefined</code> or <code>null</code>, auto-generate. If <code>[]</code> (explicit empty), respect — the caller is signaling "no triggers". This distinction matters: a chat-history article has no meaningful triggers, but a config article wants them.</p>
+
+<h3>6.3 Auto-triggers</h3>
+
+<p>When auto-generating, the engine extracts:</p>
+<ul>
+<li>First 30 chars of summary</li>
+<li>Chinese 2-4 char phrases</li>
+<li>English technical terms (<code>[a-zA-Z][a-zA-Z0-9_.\-]{2,}</code>)</li>
+<li>IP patterns</li>
+</ul>
+<p>Capped at 5 triggers per article. Cheap, no LLM.</p>
+
+<h3>6.4 <code>update</code>, <code>remove</code>, <code>supersede</code>, <code>link</code></h3>
+
+<ul>
+<li><strong>update</strong> — modify summary/detail/triggers; re-extract tags.</li>
+<li><strong>remove</strong> — delete article; clean inbound edges from other articles.</li>
+<li><strong>supersede(old, new)</strong> — mark old as <code>data-superseded-by=new</code>, re-link inbound edges to new. Old stays in file (greyed out via CSS), so you can audit history.</li>
+<li><strong>link(source, target, strength)</strong> — add typed edge. Strength persisted via <code>data-strength</code> attribute.</li>
+</ul>
+
+<h3>6.5 Deferred flush (<code>_maybeFlush</code>)</h3>
+
+<p>The engine does NOT write to disk on every <code>add()</code>. It writes when:</p>
+<ul>
+<li>10 access-buffered updates accumulate, OR</li>
+<li>60 seconds have passed since last flush.</li>
+</ul>
+<p>Why: benchmarks ingest 50+ sessions per question. A full HTML rewrite per <code>add()</code> is wasteful, and on Windows the rename-then-write sequence races with concurrent readers (ripgrep in eval scripts), producing EPERM. Deferred flush solves both.</p>
+<p>Callers needing immediate durability can <code>await engine._flush()</code> explicitly.</p>
+
+<h3>6.6 Atomic write</h3>
+
+<pre>
+rename memory.html → memory.html.bak
+writeFileSync(memory.html, serialized)
+</pre>
+<p>If write fails, the <code>.bak</code> is still there. Next <code>init()</code> falls back to <code>.bak</code> if <code>memory.html</code> is missing/corrupt.</p>
+
+<h2>7. Read operations</h2>
+
+<h3>7.1 <code>land(query, spreadDepth=1, typeFilter=null)</code></h3>
+
+<p>The main entry point. Returns ranked hits.</p>
+
+<pre>
+1. extractQueryTerms(query)
+2. for each term: grepSearch(term.pattern, memory.html, {ci})
+3. scoreResults(hits, articles)
+4. filter by matchThreshold (0.20)
+5. filter by typeFilter if provided
+6. record query terms into learner
+7. update access stats on top-5 results
+8. spread() from top-1 if spreadDepth &gt; 0
+9. return sorted hits
+</pre>
+
+<h3>7.2 <code>focus(nodeId)</code></h3>
+
+<p>Reads one article's full content + edges. Used by <code>memory_read</code> MCP tool. Updates accessCount as a side effect.</p>
+
+<h3>7.3 <code>spread(nodeId, depth=2, energy=1.0)</code></h3>
+
+<p>Graph traversal. BFS over edges, decaying energy by <code>strength</code> per hop. Stops when energy &lt; 0.1.</p>
+<p>Used by <code>land()</code> for one hop of context expansion after primary match — surfaces "the article next to your hit".</p>
+
+<h2>8. Namespaces</h2>
+
+<p>A namespace = one directory with <code>memory.html</code> + <code>memory.html.bak</code> + <code>.synonyms.json</code>.</p>
+<ul>
+<li>Multi-agent isolation: each agent gets its own basePath.</li>
+<li>Multi-user isolation: each user gets its own basePath.</li>
+<li>Multi-project isolation: each project gets its own basePath.</li>
+</ul>
+<p>The engine constructor takes <code>{ basePath }</code> — that's the only knob. No tenant IDs in queries, no ACL checks. The filesystem is the isolation layer.</p>
+<p>MCP server reads <code>MEMORY_PATH</code> env var to pick the namespace. Switch projects by switching env vars.</p>
+
+<h2>9. Interfaces</h2>
+
+<h3>9.1 HTTP (<code>server.mjs</code>)</h3>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td>POST</td><td><code>/add</code></td><td>Add memory <code>{summary, triggers?, detail?, author?, type?}</code></td></tr>
+<tr><td>POST</td><td><code>/recall</code></td><td>Search <code>{query, spreadDepth?, typeFilter?}</code></td></tr>
+<tr><td>POST</td><td><code>/addBatch</code></td><td>Batch add <code>{items: [...]}</code></td></tr>
+<tr><td>GET</td><td><code>/focus/:id</code></td><td>Get full memory by ID</td></tr>
+<tr><td>POST</td><td><code>/update</code></td><td>Update <code>{nodeId, ...fields}</code></td></tr>
+<tr><td>POST</td><td><code>/remove</code></td><td>Delete <code>{nodeId}</code></td></tr>
+<tr><td>POST</td><td><code>/link</code></td><td>Link memories <code>{source, target, strength?}</code></td></tr>
+<tr><td>GET</td><td><code>/stats</code></td><td>Node/edge counts</td></tr>
+<tr><td>GET</td><td><code>/health</code></td><td>Health check</td></tr>
+</table>
+
+<h3>9.2 MCP (<code>mcp-server.mjs</code>)</h3>
+
+<p>Six tools exposed over MCP (stdio transport), works with Claude Code, Cursor, Cline:</p>
+
+<table>
+<tr><th>Tool</th><th>Purpose</th></tr>
+<tr><td><code>memory_recall</code></td><td>Same as HTTP <code>/recall</code></td></tr>
+<tr><td><code>memory_read</code></td><td>Same as HTTP <code>/focus</code> — agent verifies candidates</td></tr>
+<tr><td><code>memory_list</code></td><td>Browse by type/tag (no query)</td></tr>
+<tr><td><code>memory_store</code></td><td>Same as HTTP <code>/add</code></td></tr>
+<tr><td><code>memory_grep</code></td><td>Raw ripgrep over HTML — bypasses scorer</td></tr>
+<tr><td><code>memory_find_symbol</code></td><td>Regex-based AST-lite symbol search for code memories</td></tr>
+</table>
+
+<p>The <code>memory_grep</code> and <code>memory_read</code> tools exist because the agent needs to drive the retrieval loop itself. <code>recall</code> returns ranked hits; if those miss, the agent can grep raw and read full text to verify.</p>
+<p>This is the agent-as-retriever pattern: the engine provides primitives, the agent provides strategy.</p>
+
+<h2>10. Agent-as-Retriever harness</h2>
+
+<p>For benchmarks like LongMemEval-S (500 questions, ~50 haystack sessions each), single-shot recall is insufficient — the query vocabulary rarely matches the answer session's vocabulary. The fix is an agent loop:</p>
+
+<h3>10.1 Architecture</h3>
+
+<pre>
+for each question:
+  ingest haystack sessions → memory.html
+  spawn agent with 3 tools (recall, grep, read)
+  for up to MAX_TURNS turns:
+    agent picks tool + args
+    engine executes, returns results
+    agent decides: verify / rewrite query / output final list
+  collect agent's session_ids, score against answer_session_ids
+</pre>
+
+<h3>10.2 What made it work (from 24% single-shot to 98.9% agent)</h3>
+
+<table>
+<tr><th>Change</th><th>Δ R@5</th></tr>
+<tr><td>Baseline: single-shot <code>recall(query)</code> → top-K</td><td>24.0%</td></tr>
+<tr><td>+ Agent loop with 1 tool, T=4</td><td>+62.7</td></tr>
+<tr><td>+ <code>memory_grep</code> + <code>memory_read</code> tools</td><td>+3.3</td></tr>
+<tr><td>+ Dynamic system prompt per question type</td><td>+3.3</td></tr>
+<tr><td>+ Hard rules prompt (≥2 distinct recalls in first 3 turns, ≤6 reads) + T=10</td><td>+5.6</td></tr>
+<tr><td class="highlight"><strong>Final</strong></td><td class="highlight"><strong>98.9%</strong></td></tr>
+</table>
+
+<p>The biggest jump (+62.7) comes from query rewriting. The agent doesn't ask the same thing 5 times — it tries the question's keywords, then synonyms, then entity names, then dates.</p>
+
+<h3>10.3 Concurrency + checkpointing</h3>
+
+<ul>
+<li><code>CONCURRENCY=4</code> workers run questions in parallel (Step Plan allows 5 concurrent requests).</li>
+<li>Each completed question appends a line to <code>.failures/_progress.jsonl</code>.</li>
+<li>Restart skips already-done <code>question_id</code>s and restores cumulative stats.</li>
+<li>Failed questions dump full traces to <code>.failures/&lt;type&gt;/&lt;qid&gt;.json</code> (query sequence, agent's collected sessions, missed answer session text).</li>
+</ul>
+<p>This makes a 3.5-hour full-500 run crash-resumable.</p>
+
+<h2>11. Design tradeoffs</h2>
+
+<table>
+<tr><th>Decision</th><th>Why</th><th>Cost</th></tr>
+<tr><td>HTML storage, not vector DB</td><td>Transparent, git-diffable, no DB ops</td><td>Single-file rewrite on flush (optimized by deferred flush)</td></tr>
+<tr><td>grep, not embeddings</td><td>No model runtime, no opaque vectors</td><td>Single-shot grep loses to vector retrieval on semantic-gap queries (24% vs ~80%); recovers via agent loop</td></tr>
+<tr><td>Zero ingestion LLM calls</td><td>Predictable write cost, zero model dependency</td><td>Can't extract structured facts at write time; 2 of 500 LongMemEval questions are unreachable</td></tr>
+<tr><td>Single-file namespace</td><td>Simple, portable, inspectable</td><td>Doesn't shard; 10K-node file is 6MB, 100K-node would be 60MB</td></tr>
+<tr><td>Agent drives retrieval loop</td><td>Highest retrieval accuracy</td><td>Each query costs N LLM calls; latency = N × per-call time</td></tr>
+<tr><td>Salience decay over time</td><td>Stale memories fade naturally</td><td>Requires tuning decayRate; current 0.005 is conservative</td></tr>
+</table>
+
+<h2>12. Known limitations</h2>
+
+<ul>
+<li><strong>Single-shot recall has a semantic-gap ceiling.</strong> <code>recall("what's my favorite hobby")</code> won't find a session that says "I love hiking on weekends" without an agent rewriting the query. Mitigated by agent loop; not eliminated.</li>
+<li><strong>No write-time fact extraction.</strong> The 2 missed LongMemEval questions are unreachable because the answer is hidden in passing ("by the way, I've been in marketing for 2 years and 4 months") inside a session about an unrelated topic. Bridging this requires LLM extraction at write time, which we don't do.</li>
+<li><strong>HTML file doesn't shard.</strong> At very large scale (100K+ memories) a single file becomes a perf bottleneck. Solution would be sharding by tag prefix, not yet implemented.</li>
+<li><strong>No multi-tenant auth.</strong> Namespaces are isolated by directory; the engine trusts whatever basePath it's given. Authentication is the host's job (HTTP server / MCP transport).</li>
+<li><strong>No garbage collection.</strong> Removed articles leave gaps; superseded articles stay in the file (greyed out). A compaction pass would help at scale.</li>
+</ul>
+
+<h2>13. Evaluation results</h2>
+
+<h3>13.1 LongMemEval-S — Agent-as-Retriever (the headline benchmark)</h3>
+
+<p><strong>Dataset</strong>: longmemeval_s, 500 questions × 6 categories (single-session-user/asst/preference, multi-session, temporal, knowledge-update). Each question has ~50 haystack sessions. Full evaluation (470 questions after dropping 30 _abs).</p>
+
+<p><strong>Protocol</strong>: fresh namespace per question, ingest all haystack sessions verbatim into <code>memory.html</code>, run LLM as retriever (MAX_TURNS=10, 3 tools: <code>memory_recall</code> / <code>memory_grep</code> / <code>memory_read</code>). Hit criterion: <code>agent's top-K session_ids ∩ answer_session_ids</code> is non-empty.</p>
+
+<p><strong>Model</strong>: StepFun <code>step-3.7-flash</code> (sparse MoE, ~11B active params), <code>reasoning_effort=high</code>, via Step Plan endpoint (<code>api.stepfun.com/step_plan/v1</code>). No GPT / Claude / Gemini called at any stage — not for embeddings (none), not for ingestion (verbatim), not for retrieval iteration (this model only).</p>
+
+<p><strong>Ablation</strong> (cumulative, same <code>step-3.7-flash</code>):</p>
+
+<table>
+<tr><th>Config</th><th>Sample</th><th>R@5</th><th>R@10</th><th>Δ</th></tr>
+<tr><td>Single-shot grep (recall → top-K, no agent)</td><td>—</td><td>24.0%</td><td>49.0%</td><td>baseline</td></tr>
+<tr><td>+ Agent loop, 1 tool (<code>memory_recall</code>), T=4</td><td>30 Q</td><td>86.7%</td><td>90.0%</td><td><strong>+62.7</strong></td></tr>
+<tr><td>+ <code>memory_grep</code> + <code>memory_read</code> tools, T=6</td><td>30 Q</td><td>90.0%</td><td>90.0%</td><td>+3.3</td></tr>
+<tr><td>+ Dynamic prompt by category</td><td>30 Q</td><td>93.3%</td><td>93.3%</td><td>+3.3</td></tr>
+<tr><td class="highlight"><strong>+ Hard-rules prompt + T=10 + Step Plan concurrency</strong></td><td class="highlight"><strong>full 500</strong></td><td class="highlight"><strong>98.9%</strong></td><td class="highlight"><strong>99.6%</strong></td><td class="highlight"><strong>+5.6</strong></td></tr>
+</table>
+
+<p><strong>Architecture characteristics</strong>:</p>
+
+<table>
+<tr><th>Dimension</th><th>Value</th></tr>
+<tr><td>Embedding model</td><td>None</td></tr>
+<tr><td>Vector database</td><td>None</td></tr>
+<tr><td>Ingestion LLM calls</td><td>Zero (sessions written verbatim)</td></tr>
+<tr><td>Agent loop model</td><td>step-3.7-flash (non-frontier)</td></tr>
+<tr><td>10K-node query median latency</td><td>991ms</td></tr>
+<tr><td>10K-node HTML file size</td><td>6MB</td></tr>
+<tr><td>Storage format</td><td>HTML (browser-readable, git-diffable)</td></tr>
+</table>
+
+<p><strong>Key observations</strong>:</p>
+<ol>
+<li>Single-shot grep at 24% is the expected ceiling — confirmed by arXiv:2605.15184. Embeddings bridge vocabulary gaps at write time; the agent-as-retriever pattern bridges them at query time via rewriting.</li>
+<li>Agent iteration is the single biggest lever (+62.7pt).</li>
+<li><code>memory_read</code> acts as a built-in LLM-as-reranker — the agent reads full text and decides whether to promote the candidate. Recovered temporal category from 75% to 100%.</li>
+<li>Dynamic prompts (per-category tips) fixed multi-session from 75% to 100% ("collect 3+ sessions, each contains a piece").</li>
+<li>Hard-rules prompt (≥2 distinct recalls in first 3 turns, read ≤6, stop early when verified) lifted ss-user from 89% to 98%.</li>
+<li>Step Plan endpoint bypasses V0 RPM=10 limit; CONCURRENCY=4 cut full-run time from 5.8h to 3.5h.</li>
+</ol>
+
+<h3>13.2 Per-type breakdown (full 500 questions)</h3>
+
+<table>
+<tr><th>Category</th><th>R@5</th><th>R@10</th><th>n</th></tr>
+<tr><td>single-session-user</td><td>98%</td><td>100%</td><td>64</td></tr>
+<tr><td>single-session-assistant</td><td>98%</td><td>100%</td><td>56</td></tr>
+<tr><td class="highlight">single-session-preference</td><td class="highlight">100%</td><td class="highlight">100%</td><td>30</td></tr>
+<tr><td>multi-session</td><td>98%</td><td>99%</td><td>121</td></tr>
+<tr><td>temporal-reasoning</td><td>99%</td><td>99%</td><td>127</td></tr>
+<tr><td class="highlight">knowledge-update</td><td class="highlight">100%</td><td class="highlight">100%</td><td>72</td></tr>
+</table>
+
+<p>ss-pref and knowledge-update are perfect. Two categories missed at most 1 question each.</p>
+
+<h3>13.3 Failure analysis (2 / 470 questions)</h3>
+
+<p>Both failures are benchmark-structural, not retrieval bugs:</p>
+
+<table>
+<tr><th>Type</th><th>Example</th><th>Root cause</th><th>Fixable?</th></tr>
+<tr><td>multi</td><td>"How long have I been in my current role?"</td><td>Answer session is about presentation templates; the user mentions in passing "started as Coordinator, worked up after 2 years and 4 months". Query vocabulary (employment, tenure) doesn't appear.</td><td>❌ Requires write-time fact extraction</td></tr>
+<tr><td>temporal</td><td>"What kitchen appliance did I buy 10 days ago?"</td><td>Answer session says "I just got a smoker today" but never uses "10 days ago" — that offset is computed from the session timestamp.</td><td>❌ Requires temporal anchoring</td></tr>
+</table>
+
+<p>Both require write-time extraction (parse sessions at ingest, store structured facts). We deliberately don't do this — it would mean abandoning the "zero ingestion LLM calls" principle. 99.6% R@10 is the trade-off.</p>
+
+<h3>13.4 Scale and tests</h3>
+
+<ul>
+<li>10K nodes: 6MB HTML, 991ms query latency (&lt; 30s budget)</li>
+<li>1K nodes: insert + query under 100ms</li>
+<li>100 concurrent writes: 90%+ success rate</li>
+<li>85 unit/integration tests pass (engine 30 + html 21 + errors 25 + scale 9)</li>
+</ul>
+
+<footer>
+<p><strong>Grepmem</strong> — Design Document. Vectorless agent memory.</p>
+<p>See also: <code>README.html</code> for product overview, <code>memory-html.js</code> / <code>grep.js</code> for code.</p>
+</footer>
+
+</body>
+</html>

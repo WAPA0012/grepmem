@@ -1,0 +1,21 @@
+{
+  "name": "grepmem",
+  "version": "2.0.0",
+  "description": "Vectorless agent memory. HTML storage + grep retrieval. No embedding model, no vector DB.",
+  "main": "memory-html.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "benchmark": "node eval/benchmark-grep.mjs",
+    "ab-test": "node eval/ab-test-v3.mjs",
+    "test": "node --test eval/test-engine.mjs eval/test-html.mjs eval/test-errors.mjs",
+    "test:scale": "node --test eval/test-scale.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

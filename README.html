@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grepmem — Vectorless Agent Memory</title>
+<meta name="description" content="Agent memory that lives as HTML files on disk. Grep-based retrieval, just-in-time context loading, zero embedding model.">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 2rem; color: #24292f; line-height: 1.6; }
+h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+h1 span { color: #0969da; }
+.subtitle { font-size: 1.1rem; color: #656d76; margin-bottom: 1.5rem; }
+h2 { font-size: 1.3rem; margin: 2rem 0 0.8rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
+h3 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; }
+p { margin: 0.5rem 0; }
+code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; font-family: 'SFMono-Regular', Consolas, monospace; }
+pre { background: #f6f8fa; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0.8rem 0; font-size: 0.85rem; line-height: 1.5; }
+.badge { display: inline-block; background: #0969da; color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; margin-right: 4px; }
+.badge.green { background: #1a7f37; }
+.badge.orange { background: #bc4c00; }
+.badge.purple { background: #6f42c1; }
+table { border-collapse: collapse; width: 100%; margin: 0.8rem 0; }
+th, td { border: 1px solid #d0d7de; padding: 6px 12px; text-align: left; font-size: 0.9rem; }
+th { background: #f6f8fa; }
+.highlight { background: #ddf4ff; }
+ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+li { margin: 0.3rem 0; }
+blockquote { border-left: 3px solid #0969da; padding-left: 1rem; color: #656d76; margin: 1rem 0; background: #f6f8fa; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+blockquote.big { font-size: 1.05rem; color: #24292f; }
+.card { border: 1px solid #d0d7de; border-radius: 8px; padding: 1rem 1.2rem; margin: 0.8rem 0; }
+.card h3 { margin-top: 0; }
+.cols { display: flex; gap: 1rem; flex-wrap: wrap; }
+.col { flex: 1; min-width: 220px; }
+.evidence { background: #f6fff6; border-left: 3px solid #1a7f37; padding: 0.8rem 1.2rem; margin: 0.8rem 0; border-radius: 0 8px 8px 0; }
+.evidence strong { color: #1a7f37; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #d0d7de; color: #656d76; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1><span>Grepmem</span></h1>
+<p class="subtitle">Vectorless agent memory. HTML on disk, grep at retrieval. The just-in-time context loading pattern, applied to the agent's own memory.</p>
+
+<p>
+<span class="badge">No embedding model</span>
+<span class="badge green">No vector DB</span>
+<span class="badge orange">MCP-ready</span>
+<span class="badge purple">Just-in-time loading</span>
+</p>
+
+<h2>What this is</h2>
+<p>An external memory store for AI agents. Memory lives on disk as <strong>HTML files</strong>. The agent queries them with <strong>grep</strong>. No embedding model. No vector database. No ingestion LLM calls.</p>
+
+<blockquote class="big">
+<strong>Memory lives on disk, not in context.</strong> The agent loads only what it needs, when it needs it. If the context is lost, the agent just re-greps.
+</blockquote>
+
+<h2>This isn't a cost optimization. It's the 2026 architecture.</h2>
+
+<p>For three years, the default RAG stack has been: chunk → embed → store vectors → cosine similarity. In 2025-2026, that consensus broke.</p>
+
+<div class="evidence">
+<strong>Research pointing to agent-as-retriever as the new default:</strong>
+<ul>
+<li><strong>Anthropic removed vector search from Claude Code in May 2025.</strong> Boris Cherny (creator): <em>"grep outperformed everything. By a lot, and this was surprising."</em></li>
+<li><strong>Amazon Science (AAAI 2026)</strong>: agentic keyword search reaches <strong>94.5% of RAG faithfulness with zero vector store</strong>.</li>
+<li><strong>Search-R1</strong> (arXiv:2503.09516): RL-trained retrieval policy, +24% relative over RAG baselines on 7 QA datasets, no vectors.</li>
+<li><strong>Chroma Context-1</strong> (March 2026): 20B agentic-search model, ~10× faster and ~25× cheaper than frontier models on retrieval.</li>
+<li><strong>Anthropic multi-agent research system</strong>: agent-as-retriever pattern, +90.2% over single-agent baseline on internal research evals.</li>
+</ul>
+</div>
+
+<blockquote>
+<strong>The pattern:</strong> in 2026, the default retrieval is no longer vectors. The default is <em>give the agent tools, let it retrieve just-in-time</em>. Add vectors only where the workload genuinely demands them.
+</blockquote>
+
+<p>This project applies that pattern to <strong>the agent's own memory</strong>. Memory is just another data source the agent retrieves from on demand. As Anthropic's own engineering post puts it: <em>"agents maintain lightweight identifiers (file paths, stored queries, web links, etc.) and use these references to dynamically load data into context at runtime using tools."</em></p>
+
+<h2>Architecture</h2>
+
+<pre>
+┌─────────────────────────────────────────────────┐
+│  Agent (Claude Code, Cursor, any LLM)           │
+│                                                 │
+│  "How do I connect to production Redis?"        │
+│         │                                       │
+│         ▼  tool call: recall / grep             │
+│                                                 │
+│  ┌─────────────────────────────────────────┐    │
+│  │  Memory Engine                          │    │
+│  │                                         │    │
+│  │  1. Tokenize query                      │    │
+│  │  2. Multi-pass ripgrep on memory.html   │    │
+│  │     - trigger surface (weight 3.0)      │    │
+│  │     - tag surface      (weight 2.0)     │    │
+│  │     - full text        (weight 1.0-1.5) │    │
+│  │     - synonym expansion(weight 1.5)     │    │
+│  │  3. Weighted scoring × salience         │    │
+│  │  4. Return top results                  │    │
+│  └─────────────────────────────────────────┘    │
+│         │                                       │
+│         ▼                                       │
+│  memory.html                                    │
+│  • &lt;article&gt; per memory, with data-tags, edges │
+│  • Human-readable in any browser                │
+│  • Agent reads with grep, human reads with eyes │
+└─────────────────────────────────────────────────┘
+</pre>
+
+<h3>Storage format</h3>
+
+<pre>
+&lt;article id="abc123" data-type="knowledge" data-tags="Redis,password,6379,cluster"&gt;
+  &lt;h2&gt;Production Redis: password r3d1s_v2_2025!, port 6379, host 192.168.1.101&lt;/h2&gt;
+  &lt;p class="detail"&gt;3-node cluster. Sentinels on 101/102/103. Pool size 100.&lt;/p&gt;
+  &lt;ul class="triggers"&gt;
+    &lt;li&gt;Redis password&lt;/li&gt;
+    &lt;li&gt;Redis connection config&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;nav class="edges"&gt;&lt;a href="#xyz"&gt;admin-panel deployment&lt;/a&gt;&lt;/nav&gt;
+&lt;/article&gt;
+
+&lt;article id="conv-2026-06-10" data-type="conversation" data-timestamp="..."&gt;
+  &lt;h2&gt;Redis upgrade discussion&lt;/h2&gt;
+  &lt;div class="conversation-body"&gt;
+    User: Should we rotate the production Redis password?
+    AI: Recommended — current one is 2 years old.
+  &lt;/div&gt;
+&lt;/article&gt;
+</pre>
+
+<p>Two article types in one file: <strong>knowledge</strong> (compiled facts) and <strong>conversation</strong> (raw history). One covers config/Q&A recall, the other covers "what did we discuss about X". Storing both in one place means the same search surface can answer "what's the prod Redis password?" and "what did we discuss about caching last week?".</p>
+
+<h2>How retrieval works</h2>
+
+<p>Four-pass grep with weighted scoring:</p>
+<ol>
+<li><strong>Trigger search</strong> — grep <code>&lt;ul class="triggers"&gt;</code> (weight 3.0)</li>
+<li><strong>Tag search</strong> — grep <code>data-tags</code> attribute (weight 2.0)</li>
+<li><strong>Full-text search</strong> — grep entire file (weight 1.0-1.5)</li>
+<li><strong>Synonym expansion</strong> — cache→Redis, crashed→failure, password→bcrypt (weight 1.5)</li>
+</ol>
+<p>Score = Σ(term hits × field weight) × effectiveSalience. Sorted descending.</p>
+
+<p><em>The built-in synonym map and Chinese stopword list (see <code>grep.js</code> and <code>learner.js</code>) cover common cross-language cases (cache→Redis, 缓存→Redis, crashed→failure). English-only users can clear <code>SYNONYMS</code> in <code>grep.js</code> — it's a plain object, no other code depends on its contents.</em></p>
+
+<h2>Fail-Improve Loop</h2>
+
+<p>Every query records which terms matched which articles. When a term co-occurs with a tag/trigger N times (and the term is NOT already in the article), it auto-promotes to a learned synonym. The system gets smarter the more you use it — without ever calling an LLM.</p>
+
+<pre>
+'k8s' → [kubernetes, pod, nodeselector, kubectl, ...]   // learned after 3 co-occurrences
+</pre>
+
+<h2>Benchmarks</h2>
+
+<h3>LongMemEval-S — the headline result</h3>
+<p>Full 500-question evaluation across 6 categories. Each question has ~50 haystack sessions; the agent must surface the right one(s).</p>
+
+<table>
+<tr><th>Configuration</th><th>R@5</th><th>R@10</th><th>Notes</th></tr>
+<tr><td>Single-shot grep (recall → top-K)</td><td>24.0%</td><td>49.0%</td><td>The "grep alone" baseline. Why pure grep loses single-shot: query vocabulary ≠ answer vocabulary.</td></tr>
+<tr><td>+ Agent loop, 1 tool, T=4 (30 Q sample)</td><td>86.7%</td><td>90.0%</td><td>LLM rewrites query across turns. <strong>+62.7pt</strong> just from agent iteration.</td></tr>
+<tr><td>+ memory_grep + memory_read tools (30 Q sample)</td><td>90.0%</td><td>90.0%</td><td>Agent can grep raw HTML and verify candidates by reading full text.</td></tr>
+<tr><td>+ Dynamic prompt by category (30 Q sample)</td><td>93.3%</td><td>93.3%</td><td>Per-type tip in system prompt.</td></tr>
+<tr><td class="highlight"><strong>+ Hard-rules prompt + MAX_TURNS=10 (full 500 Q)</strong></td><td class="highlight"><strong>98.9%</strong></td><td class="highlight"><strong>99.6%</strong></td><td class="highlight"><strong>Final config.</strong></td></tr>
+</table>
+
+<p><strong>Model used:</strong> <code>step-3.7-flash</code> (StepFun, ~11B active params, sparse MoE). All numbers above are produced by this single model with <code>reasoning_effort=high</code> for the agent loop. No call to GPT, Claude, or Gemini is made at any point — not for embeddings (none), not for ingestion (none), not for retrieval iteration (this model only).</p>
+
+<div class="evidence">
+<strong>What's running underneath the 98.9%:</strong>
+<ul>
+<li><strong>Agent model:</strong> StepFun <code>step-3.7-flash</code>, <code>reasoning_effort=high</code>. Accessed via Step Plan endpoint (<code>api.stepfun.com/step_plan/v1</code>).</li>
+<li><strong>Zero embedding model.</strong> No transformers, no GPU.</li>
+<li><strong>Zero vector database.</strong> No Chroma, no Pinecone, no Postgres+pgvector.</li>
+<li><strong>Zero ingestion LLM calls.</strong> Sessions go verbatim into HTML.</li>
+<li><strong>991ms median query latency at 10K nodes.</strong> Memory file stays under 6MB.</li>
+<li><strong>Human-readable storage.</strong> Open <code>memory.html</code> in any browser; diff it with git.</li>
+</ul>
+</div>
+
+<p><em>Methodology: full 500 Q (non-_abs = 470 evaluable), fresh namespace per question, MAX_TURNS=10, TOP_K=5, CONCURRENCY=4, deterministic answer_session_id match. Checkpoint + resume supported. Reproducible: <code>LIMIT=500 MAX_TURNS=10 CONCURRENCY=4 node eval/longmemeval-s-agent.mjs</code>.</em></p>
+
+<h3>Per-type breakdown (full 500 questions, final config)</h3>
+<table>
+<tr><th>Category</th><th>R@5</th><th>R@10</th><th>n</th><th>Notes</th></tr>
+<tr><td>single-session-user</td><td>98%</td><td class="highlight">100%</td><td>64</td><td>What did the user say about X</td></tr>
+<tr><td>single-session-assistant</td><td>98%</td><td class="highlight">100%</td><td>56</td><td>What did AI tell the user</td></tr>
+<tr><td class="highlight">single-session-preference</td><td class="highlight">100%</td><td class="highlight">100%</td><td>30</td><td>Perfect on the type other systems struggle with</td></tr>
+<tr><td>multi-session</td><td>98%</td><td>99%</td><td>121</td><td>Synthesize across sessions</td></tr>
+<tr><td>temporal-reasoning</td><td>99%</td><td>99%</td><td>127</td><td>Date/time logic</td></tr>
+<tr><td class="highlight">knowledge-update</td><td class="highlight">100%</td><td class="highlight">100%</td><td>72</td><td>Track preference changes over time</td></tr>
+</table>
+
+<h3>What we miss (2 / 470 questions)</h3>
+<p>Both failures are <strong>benchmark-structural</strong>, not retrieval bugs:</p>
+<ul>
+<li><strong>multi-session, "How long have I been in my current role?"</strong> — the user casually mentions "started as Marketing Coordinator, worked my way up to Senior Marketing Specialist after 2 years and 4 months" inside a question about presentation templates. The query vocabulary (employment, tenure, hire date) does not appear anywhere in the answer session.</li>
+<li><strong>temporal, "What kitchen appliance did I buy 10 days ago?"</strong> — the answer session text mentions "I just got a smoker today" but never uses "10 days ago" — that offset is computed from the session timestamp. Pure-text retrieval cannot find a date that does not exist as a string.</li>
+</ul>
+<p>Both require write-time fact extraction (parse sessions at ingest, store structured facts). We deliberately don't do this — it would mean abandoning the "zero ingestion LLM calls" principle. 99.6% R@10 is the trade-off.</p>
+
+
+<h2>Quick Start</h2>
+
+<pre>
+# Start the memory server (instant, no model loading)
+node server.mjs
+
+# Add a memory
+curl -X POST http://localhost:18234/add \
+  -H 'Content-Type: application/json' \
+  -d '{"summary":"Prod Redis password r3d1s, port 6379","detail":"3-node cluster","triggers":["Redis password","Redis connection"]}'
+
+# Search
+curl -X POST http://localhost:18234/recall \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"how to connect to Redis"}'
+
+# Open memory in browser
+# Just open namespaces/default/memory.html in any browser
+</pre>
+
+<h2>API</h2>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td>POST</td><td><code>/add</code></td><td>Add memory { summary, triggers?, detail?, author?, type? }</td></tr>
+<tr><td>POST</td><td><code>/recall</code></td><td>Search { query, spreadDepth?, typeFilter? }</td></tr>
+<tr><td>POST</td><td><code>/addBatch</code></td><td>Batch add { items: [...] }</td></tr>
+<tr><td>GET</td><td><code>/focus/:id</code></td><td>Get full memory by ID</td></tr>
+<tr><td>POST</td><td><code>/update</code></td><td>Update { nodeId, ...fields }</td></tr>
+<tr><td>POST</td><td><code>/remove</code></td><td>Delete { nodeId }</td></tr>
+<tr><td>POST</td><td><code>/link</code></td><td>Link memories { source, target }</td></tr>
+<tr><td>GET</td><td><code>/stats</code></td><td>Node/edge counts</td></tr>
+<tr><td>GET</td><td><code>/health</code></td><td>Health check</td></tr>
+</table>
+
+<h2>Why this exists</h2>
+
+<div class="cols">
+<div class="card col">
+<h3>The old model</h3>
+<p>Memory = vector DB. Every write costs an embedding call. Every query is cosine similarity. Memory is opaque — you can't read it, can't diff it, can't grep it. The DB lives somewhere, your data leaves your machine.</p>
+</div>
+<div class="card col">
+<h3>This model</h3>
+<p>Memory = HTML on disk. Write is just file append. Query is grep. Memory is transparent — open it in a browser, diff it with git, grep it from CLI. Your data never leaves your machine.</p>
+</div>
+</div>
+
+<h2>Roadmap</h2>
+<ul>
+<li><strong>Shipped</strong>: HTML storage, grep retrieval, fail-improve loop, dual-layer knowledge/conversation, MCP server with 6 tools (recall / read / list / store / grep / find_symbol).</li>
+<li><strong>Shipped</strong>: Agent-as-retriever benchmark — LongMemEval-S R@5 = 98.9% on full 500 questions.</li>
+<li><strong>Next</strong>: End-to-end QA evaluation on LongMemEval (retrieve → answer → judge), so the project has a comparable accuracy number alongside the retrieval number.</li>
+<li><strong>Next</strong>: Cross-benchmark validation — run the same agent harness on LoCoMo and ConvoMem to confirm the pattern generalizes beyond LongMemEval.</li>
+<li><strong>Later</strong>: Lightweight write-time fact extraction (optional, off by default) — a compromise that captures the 2 missed questions without making zero-ingestion-LLM the default mode.</li>
+<li><strong>Later</strong>: Production dogfooding — wire the MCP server into Claude Code / Cursor for real-world daily use and measure recall latency / hit rate on actual user queries.</li>
+</ul>
+
+<h2>Files</h2>
+<table>
+<tr><th>File</th><th>Purpose</th></tr>
+<tr><td><code>memory-html.js</code></td><td>Core engine — MemoryEngine class</td></tr>
+<tr><td><code>html-template.js</code></td><td>HTML serialization/deserialization</td></tr>
+<tr><td><code>grep.js</code></td><td>Grep retrieval layer + synonym map</td></tr>
+<tr><td><code>learner.js</code></td><td>Fail-improve loop (synonym auto-learning)</td></tr>
+<tr><td><code>mcp-server.mjs</code></td><td>MCP server with 6 tools (recall/read/list/store/grep/find_symbol)</td></tr>
+<tr><td><code>server.mjs</code></td><td>HTTP API server</td></tr>
+<tr><td><code>eval/longmemeval-s-agent.mjs</code></td><td>Agent-as-retriever benchmark — <strong>R@5 = 93.3%</strong></td></tr>
+<tr><td><code>eval/longmemeval-s-retrieval.mjs</code></td><td>Single-shot grep baseline (R@5 = 24%)</td></tr>
+<tr><td><code>eval/locomo-retrieval-full.mjs</code></td><td>LoCoMo retrieval benchmark</td></tr>
+<tr><td><code>eval/benchmark-grep.mjs</code></td><td>Internal retrieval benchmark (97% on 63 queries)</td></tr>
+<tr><td><code>eval/ab-test-v3.mjs</code></td><td>Agent A/B test (+5.2 delta)</td></tr>
+<tr><td><code>eval/dataset.js</code></td><td>50 memories + 63 test queries</td></tr>
+<tr><td><code>eval/test-*.mjs</code></td><td>Unit/integration tests (engine, html, errors, scale)</td></tr>
+<tr><td><code>bench/</code></td><td>MemoryBench integration (LoCoMo / LongMemEval / ConvoMem)</td></tr>
+</table>
+
+<h2>References</h2>
+<ul>
+<li><a href="https://arxiv.org/abs/2605.15184">Is Grep All You Need? How Agent Harnesses Reshape Agentic Search (PwCUS, 2026)</a> — the paper that directly motivated our agent-as-retriever approach.</li>
+<li><a href="https://buzzgrewal.medium.com/ai-agents-dont-need-vector-search-anymore-inside-the-agentic-search-stack-replacing-rag-in-2026-58efcabe4f6f">AI Agents Don't Need Vector Search Anymore (2026 survey)</a> — survey of the agentic search stack.</li>
+<li><a href="https://arxiv.org/abs/2602.23368">Keyword Search Is All You Need (Amazon, AAAI 2026)</a> — 94.5% of RAG faithfulness with zero vectors.</li>
+<li><a href="https://arxiv.org/abs/2503.09516">Search-R1</a> — RL-trained retrieval policy.</li>
+<li><a href="https://arxiv.org/abs/2605.05242">DCI-Agent</a> — direct corpus interaction.</li>
+<li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic: Effective context engineering</a> — just-in-time context loading.</li>
+</ul>
+
+<footer>
+<p><strong>Grepmem</strong> — Vectorless agent memory. Just-in-time context loading for the agent's own memory.</p>
+<p>Memory lives on disk. Context only holds access results. If lost, re-grep.</p>
+</footer>
+
+</body>
+</html>

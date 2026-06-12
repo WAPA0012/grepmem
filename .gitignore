@@ -1,0 +1,39 @@
+node_modules/
+namespaces/
+
+# Test/benchmark scratch dirs (created by eval scripts, deleted after)
+.ab-*
+.bench-*
+.benchmark-*
+.dbg-*
+.lme-*
+.locomo-*
+.test-*
+.mcp-test
+.smoke-*
+
+# Failure traces from agent-as-retriever eval (regenerable)
+.failures/
+
+# Backup files
+*.html.bak
+*.bak
+
+# Large datasets — download from upstream, do not commit
+# https://github.com/xiaowu0162/longmemeval
+data/longmemeval_s_cleaned.json
+data/longmemeval_oracle.json
+data/providers/
+data/runs/
+
+# MemoryBench (bench/) is a fork; its scratch data shouldn't be committed
+bench/data/
+bench/supermemory/
+bench/supermemory_assets/
+bench/ui/node_modules/
+bench/ui/.next/
+
+# Environment
+.env
+.env.local
+*.log
