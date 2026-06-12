@@ -152,6 +152,22 @@ Both failures are **benchmark-structural**, not retrieval bugs:
 
 Both require write-time fact extraction (parse sessions at ingest, store structured facts). We deliberately don't do this — it would mean abandoning the "zero ingestion LLM calls" principle. 99.6% R@10 is the trade-off.
 
+### Production cost vs benchmark cost
+
+The 98.9% R@5 number above comes from the **agent-as-retriever benchmark harness**, not from a single `recall()` call. Be aware of this gap:
+
+| Path | LLM calls | Latency | Recall |
+|------|-----------|---------|--------|
+| **Production single-shot** `engine.land(query)` | 0 | ~500ms | depends on memory size + query quality |
+| **MCP tool** `memory_recall` (one tool call) | 0 | ~500ms | same |
+| **Benchmark harness** `eval/longmemeval-s-agent.mjs` (10-turn agent loop with query rewriting + verification) | up to 10 per question | 15-30s per question | 98.9% R@5 |
+
+For small memory namespaces (tens to low hundreds of memories, exact keyword matches) single-shot grep is enough. For LongMemEval-scale haystacks (50 sessions per question, semantic-gap queries) the agent loop is what bridges the gap.
+
+In production via the MCP server, the host agent (Claude Code, Cursor) drives the loop itself — it can call `memory_recall`, see results, decide to call `memory_grep` with a different term, then `memory_read` to verify. That's the agent-as-retriever pattern playing out in real time, at the host's discretion.
+
+If you need to reproduce benchmark-style results in production, run the same multi-tool loop in your agent harness. The engine never decides on its own to multi-call.
+
 ---
 
 ## Quick start
@@ -258,7 +274,7 @@ See [`examples/claude-code-setup.md`](examples/claude-code-setup.md) for the ful
 
 | The old model | This model |
 |---------------|------------|
-| Memory = vector DB. Every write costs an embedding call. Every query is cosine similarity. Memory is opaque — you can't read it, can't diff it, can't grep it. The DB lives somewhere, your data leaves your machine. | Memory = HTML on disk. Write is just file append. Query is grep. Memory is transparent — open it in a browser, diff it with git, grep it from CLI. Your data never leaves your machine. |
+| Memory = vector DB. Memory is opaque — you can't read it, can't diff it, can't grep it. The DB lives somewhere, your data leaves your machine. | Memory = HTML on disk. Memory is transparent — open it in a browser, diff it with git, grep it from CLI. Your data never leaves your machine. |
 
 ## Roadmap
 

@@ -55,7 +55,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #d0d7de; col
 <strong>Memory lives on disk, not in context.</strong> The agent loads only what it needs, when it needs it. If the context is lost, the agent just re-greps.
 </blockquote>
 
-<h2>This isn't a cost optimization. It's the 2026 architecture.</h2>
+<h2>This is the 2026 retrieval architecture.</h2>
 
 <p>For three years, the default RAG stack has been: chunk → embed → store vectors → cosine similarity. In 2025-2026, that consensus broke.</p>
 
@@ -201,6 +201,23 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #d0d7de; col
 </ul>
 <p>Both require write-time fact extraction (parse sessions at ingest, store structured facts). We deliberately don't do this — it would mean abandoning the "zero ingestion LLM calls" principle. 99.6% R@10 is the trade-off.</p>
 
+<h3>Production cost vs benchmark cost</h3>
+<p>The 98.9% R@5 number above comes from the <strong>agent-as-retriever benchmark harness</strong>, not from a single <code>recall()</code> call. Be aware of this gap:</p>
+
+<table>
+<tr><th>Path</th><th>LLM calls</th><th>Latency</th><th>Recall</th></tr>
+<tr><td><strong>Production single-shot</strong> <code>engine.land(query)</code></td><td>0</td><td>~500ms</td><td>depends on memory size + query quality</td></tr>
+<tr><td><strong>MCP tool</strong> <code>memory_recall</code> (one tool call)</td><td>0</td><td>~500ms</td><td>same</td></tr>
+<tr><td><strong>Benchmark harness</strong> <code>eval/longmemeval-s-agent.mjs</code> (10-turn agent loop with query rewriting + verification)</td><td>up to 10 per question</td><td>15-30s per question</td><td>98.9% R@5</td></tr>
+</table>
+
+<p>For small memory namespaces (tens to low hundreds of memories, exact keyword matches) single-shot grep is enough. For LongMemEval-scale haystacks (50 sessions per question, semantic-gap queries) the agent loop is what bridges the gap.</p>
+
+<p>In production via the MCP server, the host agent (Claude Code, Cursor) drives the loop itself — it can call <code>memory_recall</code>, see results, decide to call <code>memory_grep</code> with a different term, then <code>memory_read</code> to verify. That's the agent-as-retriever pattern playing out in real time, at the host's discretion.</p>
+
+<p>If you need to reproduce benchmark-style results in production, run the same multi-tool loop in your agent harness. The engine never decides on its own to multi-call.</p>
+
+
 
 <h2>Quick Start</h2>
 
@@ -241,7 +258,7 @@ curl -X POST http://localhost:18234/recall \
 <div class="cols">
 <div class="card col">
 <h3>The old model</h3>
-<p>Memory = vector DB. Every write costs an embedding call. Every query is cosine similarity. Memory is opaque — you can't read it, can't diff it, can't grep it. The DB lives somewhere, your data leaves your machine.</p>
+<p>Memory = vector DB. Memory is opaque — you can't read it, can't diff it, can't grep it. The DB lives somewhere, your data leaves your machine.</p>
 </div>
 <div class="card col">
 <h3>This model</h3>
