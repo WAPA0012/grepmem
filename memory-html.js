@@ -5,12 +5,13 @@
  * Retrieval: ripgrep multi-strategy search.
  * No embedding model, no vector index.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
 import { serializeHtml, parseHtml, articleToHtml } from './html-template.js';
 import { searchAndScore, extractTags, extractQueryTerms } from './grep.js';
 import { SynonymLearner } from './learner.js';
+import { MemoryIndex } from './index.js';
 
 // Wire learner into grep module via global
 globalThis.__SYNONYM_LEARNER = null;
@@ -52,13 +53,20 @@ export class MemoryEngine {
     this._learner = new SynonymLearner({ basePath: this.basePath });
     globalThis.__SYNONYM_LEARNER = this._learner;
 
+    // Init JSON index (cache layer). Set GREPMEM_INDEX=0 to disable.
+    // Index is optional — if it fails to load or is stale, search falls back to grep.
+    this._indexEnabled = (process.env.GREPMEM_INDEX || '1') !== '0';
+    this._index = this._indexEnabled
+      ? new MemoryIndex({ htmlPath: this.htmlPath })
+      : null;
+
     return this;
   }
 
   // ─── Read operations ─────────────────────────────────────────────────────
 
   async land(query, spreadDepth = 1, typeFilter = null) {
-    const results = searchAndScore(query, this.htmlPath, this._articles);
+    const results = searchAndScore(query, this.htmlPath, this._articles, this._index);
 
     // Filter by threshold
     let filtered = results.filter(r => r.match >= this.config.matchThreshold);
@@ -461,6 +469,20 @@ export class MemoryEngine {
     this._dirty = false;
     this._lastFlush = Date.now();
     this._accessBuffer = [];
+
+    // Sync JSON index. Stays consistent with HTML because both are written
+    // in this same synchronous block — readers either see old (HTML+bak) or
+    // new (HTML+index), never HTML-without-index.
+    if (this._index) {
+      try {
+        const stat = statSync(this.htmlPath);
+        this._index.writeFromArticles(this._articles, html, stat.mtimeMs);
+      } catch (e) {
+        // Index write failed (disk full, perm, etc). Don't crash the flush —
+        // next query will detect stale index and fall back to grep.
+        process.stderr.write(`[grepmem] index write failed, will use grep fallback: ${e.message}\n`);
+      }
+    }
 
     // Flush learner
     if (this._learner) this._learner.flush();

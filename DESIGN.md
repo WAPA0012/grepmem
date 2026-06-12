@@ -119,7 +119,16 @@ One file per namespace. Schema:
 - **git-diffable.** One article per `<article>` block, one line per field. Diffs are reviewable.
 - **No parser needed for reads.** Ripgrep + regex extracts fields. (Writes use a small serializer; reads use line-range mapping.)
 
-## 4. Retrieval engine (`grep.js`)
+## 4. Retrieval engine (`grep.js` + `index.js`)
+
+The retrieval layer has two paths:
+
+- **Index path** (`index.js`): JSON inverted index built from HTML on every flush. O(matched_ids) per query, no ripgrep subprocess. ~50× faster at 10K+ nodes.
+- **Grep path** (`grep.js`): ripgrep multi-pass. Original implementation, used when no index, index is stale, or index throws.
+
+`searchAndScore()` tries index first; falls back to grep silently on any failure. The two paths return the same top-K ids for the same query (verified by `eval/test-index.mjs`).
+
+The index is a derived cache — delete it any time, the engine rebuilds on next flush or falls back to grep. Disable with `GREPMEM_INDEX=0`.
 
 ### 4.1 Why not embeddings
 

@@ -8,8 +8,9 @@
     "start": "node server.mjs",
     "benchmark": "node eval/benchmark-grep.mjs",
     "ab-test": "node eval/ab-test-v3.mjs",
-    "test": "node --test eval/test-engine.mjs eval/test-html.mjs eval/test-errors.mjs",
-    "test:scale": "node --test eval/test-scale.mjs"
+    "test": "node --test eval/test-engine.mjs eval/test-html.mjs eval/test-errors.mjs eval/test-index.mjs",
+    "test:scale": "node --test eval/test-scale.mjs",
+    "test:all": "node --test eval/test-engine.mjs eval/test-html.mjs eval/test-errors.mjs eval/test-index.mjs eval/test-scale.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
