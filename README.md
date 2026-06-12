@@ -66,6 +66,43 @@ curl -X POST http://localhost:18234/recall \
 
 `namespaces/default/memory.html` — fully human-readable.
 
+## Configuration
+
+All configuration is via environment variables. Copy [`.env.example`](.env.example) to `.env` and edit.
+
+### Production (server / MCP)
+
+| Var | Default | Description |
+|-----|---------|-------------|
+| `MEMORY_PATH` | `./namespaces/default` | Where to store `memory.html`. Switch per-project / per-user / per-agent. |
+| `MEMORY_PORT` | `18234` | HTTP server port (server.mjs only) |
+
+### Eval scripts
+
+| Var | Default | Description |
+|-----|---------|-------------|
+| `LLM_KEY` | — | Required for agent-as-retriever benchmark. StepFun / OpenAI / any OpenAI-compatible API key. |
+| `LLM_BASE` | — | API endpoint. Recommended: `https://api.stepfun.com/step_plan/v1` |
+| `LLM_MODEL` | `step-3.7-flash` | Model name |
+| `LIMIT` | `20` | Number of questions to evaluate |
+| `MAX_TURNS` | `5` | Tool calls per question |
+| `CONCURRENCY` | `4` | Parallel questions |
+| `RESUME` | `1` | `1` = resume from checkpoint, `0` = start fresh |
+
+## Examples
+
+| Example | What it shows |
+|---------|---------------|
+| [`examples/basic-usage.mjs`](examples/basic-usage.mjs) | Use the engine as a library — no HTTP server. Store knowledge + conversation, recall, focus. |
+| [`examples/http-client.mjs`](examples/http-client.mjs) | Talk to the HTTP server from any language via `fetch`. |
+| [`examples/claude-code-setup.md`](examples/claude-code-setup.md) | Wire Grepmem into Claude Code as an MCP tool. |
+
+Run example 1 to see it work end-to-end:
+
+```bash
+node examples/basic-usage.mjs
+```
+
 ## Wire into Claude Code
 
 ```bash
