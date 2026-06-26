@@ -71,12 +71,12 @@ console.log(`Rounds: ${ROUNDS}\n`);
 
 const privateKnowledge = [
   {
-    summary: '公司项目admin-panel部署在内网192.168.1.100:3000，SSH用户名deployer',
+    summary: '公司项目admin-panel部署在内网 10.0.0.100:3000，SSH用户名deployer',
     detail: '通过VPN连接后访问。数据库在同一台机器的5432端口，数据库名admin_prod。部署用PM2，进程名admin-panel',
     triggers: ['admin-panel部署信息', '内网后台地址', '公司管理后台在哪', 'SSH连接生产服务器', 'deployer用户'],
   },
   {
-    summary: '项目用的Redis密码是r3d1s_pr0d_2024!，端口6379，在192.168.1.101',
+    summary: '项目用的Redis密码是 <YOUR_REDIS_PASSWORD>，端口6379，在 10.0.0.101',
     detail: 'Redis集群模式，3个节点。哨兵在101、102、103。连接池大小设为50',
     triggers: ['Redis密码', 'Redis连接配置', 'Redis集群地址', '生产Redis配置'],
   },
@@ -96,8 +96,8 @@ const privateKnowledge = [
     triggers: ['前端项目Node版本', 'pnpm版本', 'nvm配置', 'Node版本要求'],
   },
   {
-    summary: 'API网关在192.168.1.200:8080，用Kong，admin API在:8001',
-    detail: '路由规则在Kong的services表。限流100req/min每服务。日志打到ELK: 192.168.1.250:9200',
+    summary: 'API网关在 10.0.0.200:8080，用Kong，admin API在:8001',
+    detail: '路由规则在Kong的services表。限流100req/min每服务。日志打到ELK: 10.0.0.250:9200',
     triggers: ['API网关地址', 'Kong配置', '微服务路由', '网关admin端口'],
   },
   {
@@ -123,12 +123,12 @@ const privateKnowledge = [
 ];
 
 const testQueries = [
-  { query: 'admin-panel部署在哪台服务器', expectInfo: '192.168.1.100', desc: '内网地址' },
-  { query: '生产环境Redis怎么连', expectInfo: 'r3d1s_pr0d_2024', desc: 'Redis密码' },
+  { query: 'admin-panel部署在哪台服务器', expectInfo: '10.0.0.100', desc: '内网地址' },
+  { query: '生产环境Redis怎么连', expectInfo: '<YOUR_REDIS_PASSWORD>', desc: 'Redis密码' },
   { query: 'JWT的token过期时间是多少', expectInfo: '2小时', desc: 'JWT配置' },
   { query: 'GitLab Runner怎么配置的', expectInfo: 'docker-shell', desc: 'CI/CD' },
   { query: '项目用的什么Node版本', expectInfo: '18.19.0', desc: 'Node版本' },
-  { query: 'API网关在哪', expectInfo: '192.168.1.200', desc: '网关' },
+  { query: 'API网关在哪', expectInfo: '10.0.0.200', desc: '网关' },
   { query: '测试环境数据库怎么连', expectInfo: 'test_user', desc: '测试DB' },
   { query: '张总对API性能有什么要求', expectInfo: '200ms', desc: '客户SLA' },
   { query: '上次OOM是什么原因', expectInfo: '图片', desc: '线上故障' },

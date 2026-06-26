@@ -72,8 +72,8 @@ One file per namespace. Schema:
          data-access-count="3"
          data-last-access="2026-06-11"
          data-timestamp="2026-06-10T14:30:00Z">
-  <h2>Production Redis password r3d1s, port 6379 <span class="type-badge type-knowledge">knowledge</span></h2>
-  <p class="detail">3-node cluster. Sentinels on 101/102/103. Pool size 100.</p>
+  <h2>Production Redis password &lt;YOUR_REDIS_PASSWORD&gt;, port 6379 <span class="type-badge type-knowledge">knowledge</span></h2>
+  <p class="detail">3-node cluster. Sentinels on 10.0.0.101/102/103. Pool size 100.</p>
   <ul class="triggers">
     <li>Redis connection config</li>
     <li>Redis password</li>
@@ -172,7 +172,7 @@ A query string is broken into a list of `{pattern, weight, type}` terms:
 | English word | `[a-zA-Z][a-zA-Z0-9_.\-]+` | 2.0 (+1.5 case-insensitive) | `Redis`, `6379` |
 | Chinese bigram | consecutive CJK pairs | 1.5 | `缓存` → `缓存` |
 | Chinese trigram | consecutive CJK triples | 2.0 | `Redis配置` |
-| IP / port | `\d+\.\d+\.\d+\.\d+(:\d+)?` | 3.0 | `192.168.1.101` |
+| IP / port | `\d+\.\d+\.\d+\.\d+(:\d+)?` | 3.0 | `10.0.0.101` |
 | Bare numbers | `\d{2,}` | 1.5 | `6379`, `2024` |
 | Synonyms (built-in) | expansion map | 1.5 | `缓存` → `Redis`, `redis` |
 | Synonyms (learned) | learner output | 1.8 | `k8s` → `kubernetes`, `pod`, `kubectl` |

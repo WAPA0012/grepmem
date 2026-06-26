@@ -90,13 +90,13 @@ test('all fields survive write→read', async () => {
 test('Chinese summary survives round-trip', async () => {
   await withEngine('zh', async (engine, dir) => {
     const r = await engine.add({
-      summary: '生产环境Redis密码是r3d1s，端口6379',
+      summary: '生产环境Redis密码是 <YOUR_REDIS_PASSWORD>，端口6379',
       detail: '集群模式，3个节点',
       triggers: ['Redis配置'],
     });
     const e2 = await reload(dir, engine);
     const node = await e2.focus(r.id);
-    assert.equal(node.summary, '生产环境Redis密码是r3d1s，端口6379');
+    assert.equal(node.summary, '生产环境Redis密码是 <YOUR_REDIS_PASSWORD>，端口6379');
     assert.equal(node.detail, '集群模式，3个节点');
     assert.deepEqual(node.triggers, ['Redis配置']);
   });
@@ -321,13 +321,13 @@ test('totally empty file is handled', async () => {
 test('tags are auto-generated from English + Chinese + IP', async () => {
   await withEngine('tags-gen', async (engine) => {
     const r = await engine.add({
-      summary: 'Redis 6379 at 192.168.1.100, password abc123',
+      summary: 'Redis 6379 at 10.0.0.100, password abc123',
       detail: '集群模式 cluster',
     });
     const node = await engine.focus(r.id);
     const tags = engine._articles.get(r.id).tags;
     assert.ok(tags.some(t => t.toLowerCase().includes('redis')));
-    assert.ok(tags.some(t => t.includes('192.168.1.100')));
+    assert.ok(tags.some(t => t.includes('10.0.0.100')));
     assert.ok(tags.some(t => t.includes('集群') || t.includes('模式')));
   });
 });

@@ -64,8 +64,8 @@ This project applies that pattern to **the agent's own memory**. Memory is just 
 
 ```html
 <article id="abc123" data-type="knowledge" data-tags="Redis,password,6379,cluster">
-  <h2>Production Redis: password r3d1s_v2_2025!, port 6379, host 192.168.1.101</h2>
-  <p class="detail">3-node cluster. Sentinels on 101/102/103. Pool size 100.</p>
+  <h2>Production Redis: password &lt;YOUR_REDIS_PASSWORD&gt;, port 6379, host 10.0.0.x</h2>
+  <p class="detail">3-node cluster. Sentinels on 10.0.0.101/102/103. Pool size 100.</p>
   <ul class="triggers">
     <li>Redis password</li>
     <li>Redis connection config</li>
@@ -190,8 +190,8 @@ node mcp-server.mjs
 curl -X POST http://localhost:18234/add \
   -H 'Content-Type: application/json' \
   -d '{
-    "summary": "Production Redis password r3d1s, port 6379",
-    "detail": "3-node cluster. Sentinels on 101/102/103.",
+    "summary": "Production Redis password <YOUR_REDIS_PASSWORD>, port 6379",
+    "detail": "3-node cluster. Sentinels on 10.0.0.101/102/103.",
     "triggers": ["Redis password", "Redis connection"],
     "type": "knowledge"
   }'

@@ -107,8 +107,8 @@ This document describes the current architecture (HTML storage + grep retrieval)
          data-access-count="3"
          data-last-access="2026-06-11"
          data-timestamp="2026-06-10T14:30:00Z"&gt;
-  &lt;h2&gt;Production Redis password r3d1s, port 6379 &lt;span class="type-badge type-knowledge"&gt;knowledge&lt;/span&gt;&lt;/h2&gt;
-  &lt;p class="detail"&gt;3-node cluster. Sentinels on 101/102/103. Pool size 100.&lt;/p&gt;
+  &lt;h2&gt;Production Redis password &amp;lt;YOUR_REDIS_PASSWORD&amp;gt;, port 6379 &lt;span class="type-badge type-knowledge"&gt;knowledge&lt;/span&gt;&lt;/h2&gt;
+  &lt;p class="detail"&gt;3-node cluster. Sentinels on 10.0.0.101/102/103. Pool size 100.&lt;/p&gt;
   &lt;ul class="triggers"&gt;
     &lt;li&gt;Redis connection config&lt;/li&gt;
     &lt;li&gt;Redis password&lt;/li&gt;
@@ -202,7 +202,7 @@ sort articles by score × effectiveSalience, descending
 <tr><td>English word</td><td><code>[a-zA-Z][a-zA-Z0-9_.\-]+</code></td><td>2.0 (+1.5 case-insensitive)</td><td><code>Redis</code>, <code>6379</code></td></tr>
 <tr><td>Chinese bigram</td><td>consecutive CJK pairs</td><td>1.5</td><td>缓存 → 缓存</td></tr>
 <tr><td>Chinese trigram</td><td>consecutive CJK triples</td><td>2.0</td><td>Redis配置</td></tr>
-<tr><td>IP / port</td><td><code>\d+\.\d+\.\d+\.\d+(:\d+)?</code></td><td>3.0</td><td><code>192.168.1.101</code></td></tr>
+<tr><td>IP / port</td><td><code>\d+\.\d+\.\d+\.\d+(:\d+)?</code></td><td>3.0</td><td><code>10.0.0.101</code></td></tr>
 <tr><td>Bare numbers</td><td><code>\d{2,}</code></td><td>1.5</td><td><code>6379</code>, <code>2024</code></td></tr>
 <tr><td>Synonyms (built-in)</td><td>expansion map</td><td>1.5</td><td>缓存 → Redis, redis</td></tr>
 <tr><td>Synonyms (learned)</td><td>learner output</td><td>1.8</td><td><code>k8s</code> → <code>kubernetes</code>, <code>pod</code>, <code>kubectl</code></td></tr>

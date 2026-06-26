@@ -16,8 +16,8 @@ await engine.init();
 // Add a knowledge article
 await engine.add({
   type: 'knowledge',
-  summary: 'Redis密码r3d1s_v2_2025!，端口6379，在192.168.1.101',
-  detail: '集群3节点。哨兵101/102/103。连接池100',
+  summary: 'Redis密码 <YOUR_REDIS_PASSWORD>，端口6379，在 10.0.0.x',
+  detail: '集群3节点。哨兵 10.0.0.101/102/103。连接池100',
   triggers: ['Redis密码', 'Redis连接配置'],
   author: 'ops-bot',
 });

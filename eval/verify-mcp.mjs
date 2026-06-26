@@ -34,8 +34,8 @@ console.log('--- memory_store (knowledge) ---');
 let r = await client.callTool({
   name: 'memory_store',
   arguments: {
-    summary: 'Production Redis password r3d1s_v2_2025, port 6379, host 192.168.1.101',
-    detail: '3-node cluster. Sentinels on 101/102/103. Pool size 100.',
+    summary: 'Production Redis password <YOUR_REDIS_PASSWORD>, port 6379, host 10.0.0.x',
+    detail: '3-node cluster. Sentinels on 10.0.0.101/102/103. Pool size 100.',
     triggers: ['Redis password', 'Redis connection config'],
     type: 'knowledge',
     author: 'test',

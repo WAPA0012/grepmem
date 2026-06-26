@@ -36,12 +36,12 @@ Open Claude Code and just ask natural questions. Claude will decide when
 to store and recall:
 
 ```
-You: Hey, the prod Redis password is r3d1s_v2_2025, port 6379.
+You: Hey, the prod Redis password is <YOUR_REDIS_PASSWORD>, port 6379.
 Claude: [calls memory_store tool] Stored.
 
 You: What's the prod Redis password again?
 Claude: [calls memory_recall "Redis password"]
-       The prod Redis password is r3d1s_v2_2025, port 6379.
+       The prod Redis password is <YOUR_REDIS_PASSWORD>, port 6379.
 ```
 
 ## 4. Tools exposed

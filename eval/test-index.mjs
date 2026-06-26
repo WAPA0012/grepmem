@@ -42,7 +42,7 @@ test('index file is created after flush', async () => {
   await withEngine('build', async (engine, dir) => {
     await engine.add({
       type: 'knowledge',
-      summary: 'Redis password r3d1s, port 6379',
+      summary: 'Redis password <YOUR_REDIS_PASSWORD>, port 6379',
       detail: '3-node cluster',
       triggers: ['Redis password'],
     });
@@ -63,7 +63,7 @@ test('index lookup returns correct ids', async () => {
   await withEngine('lookup', async (engine, dir) => {
     await engine.add({
       type: 'knowledge',
-      summary: 'Redis password r3d1s',
+      summary: 'Redis password <YOUR_REDIS_PASSWORD>',
       detail: 'cluster config',
       triggers: ['Redis password'],
       tags: ['redis', 'password'],

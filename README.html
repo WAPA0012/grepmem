@@ -111,8 +111,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #d0d7de; col
 
 <pre>
 &lt;article id="abc123" data-type="knowledge" data-tags="Redis,password,6379,cluster"&gt;
-  &lt;h2&gt;Production Redis: password r3d1s_v2_2025!, port 6379, host 192.168.1.101&lt;/h2&gt;
-  &lt;p class="detail"&gt;3-node cluster. Sentinels on 101/102/103. Pool size 100.&lt;/p&gt;
+  &lt;h2&gt;Production Redis: password &amp;lt;YOUR_REDIS_PASSWORD&amp;gt;, port 6379, host 10.0.0.x&lt;/h2&gt;
+  &lt;p class="detail"&gt;3-node cluster. Sentinels on 10.0.0.101/102/103. Pool size 100.&lt;/p&gt;
   &lt;ul class="triggers"&gt;
     &lt;li&gt;Redis password&lt;/li&gt;
     &lt;li&gt;Redis connection config&lt;/li&gt;
@@ -228,7 +228,7 @@ node server.mjs
 # Add a memory
 curl -X POST http://localhost:18234/add \
   -H 'Content-Type: application/json' \
-  -d '{"summary":"Prod Redis password r3d1s, port 6379","detail":"3-node cluster","triggers":["Redis password","Redis connection"]}'
+  -d '{"summary":"Prod Redis password <YOUR_REDIS_PASSWORD>, port 6379","detail":"3-node cluster","triggers":["Redis password","Redis connection"]}'
 
 # Search
 curl -X POST http://localhost:18234/recall \

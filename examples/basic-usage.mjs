@@ -16,14 +16,14 @@ await engine.init();
 // ─── Store knowledge (compiled facts) ──────────────────────────────────────
 await engine.add({
   type: 'knowledge',
-  summary: 'Production Redis password r3d1s, port 6379, host 192.168.1.101',
+  summary: 'Production Redis password <YOUR_REDIS_PASSWORD>, port 6379, host 10.0.0.x',
   detail: '3-node cluster. Sentinels on 101/102/103. Pool size 100.',
   triggers: ['Redis password', 'Redis connection config'],
 });
 
 await engine.add({
   type: 'knowledge',
-  summary: 'admin-panel deploys to 192.168.1.100:3000, SSH user "deployer"',
+  summary: 'admin-panel deploys to 10.0.0.100:3000, SSH user "deployer"',
   detail: 'Behind VPN. PM2 process name "admin-panel".',
   triggers: ['admin-panel deployment', 'internal admin URL'],
 });
