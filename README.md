@@ -280,7 +280,7 @@ See [`examples/claude-code-setup.md`](examples/claude-code-setup.md) for the ful
 
 - **Shipped**: HTML storage, grep retrieval, fail-improve loop, dual-layer knowledge/conversation, MCP server with 6 tools (recall / read / list / store / grep / find_symbol).
 - **Shipped**: Agent-as-retriever benchmark — LongMemEval-S R@5 = 98.9% on full 500 questions.
-- **Next**: End-to-end QA evaluation on LongMemEval (retrieve → answer → judge), so the project has a comparable accuracy number alongside the retrieval number.
+- **Shipped**: End-to-end evaluation on [MemoryAgentBench](eval/memoryagentbench/README.md) — 21 task configs / 3,671 queries, official + answered-only scores, retrieval-vs-answer attribution, and StepFun `step_plan` content-filter findings.
 - **Next**: Cross-benchmark validation — run the same agent harness on LoCoMo and ConvoMem to confirm the pattern generalizes beyond LongMemEval.
 - **Next**: Tiered storage — node states (ACTIVE / SILENT / ARCHIVED / deep-sleep), low-salience memories auto-migrate to an `archived/` subdir. Main `memory.html` stays small; archive is searched only on explicit request. This is what makes multi-year conversation feasible.
 - **Next**: Salience consolidation — Ebbinghaus-style decay where memories that get retrieved/cited/linked decay slower. Currently `effectiveSalience` is flat; this makes "frequently used config" survive years while "yesterday's lunch order" fades naturally.
