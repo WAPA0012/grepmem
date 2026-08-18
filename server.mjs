@@ -1,4 +1,6 @@
 import http from 'http';
+import { execFileSync } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
 import { MemoryEngine } from './memory-html.js';
 
 const PORT = parseInt(process.env.MEMORY_PORT || '18234');
@@ -10,6 +12,10 @@ async function main() {
 
   const engine = new MemoryEngine({ basePath: BASE_PATH });
   await engine.init();
+  // Env-tunable near-dup threshold. The official LME eval harness sets 1.01
+  // (disabled): chunk-stream ingestion shares topical tags across chunks and
+  // 0.85 silently drops them as near-duplicates.
+  engine.config.dedupThreshold = parseFloat(process.env.GREPMEM_DEDUP_THRESHOLD || '0.85');
 
   const stats = engine.stats();
   console.log(`  nodes:   ${stats.nodes}`);
@@ -130,6 +136,33 @@ async function main() {
         return;
       }
 
+      // POST /grep — raw regex grep over memory.html (port of the eval
+      // harness grepHtml: rg -n -i, line→article mapping, noise-line filter)
+      if (path === '/grep' && req.method === 'POST') {
+        const body = await readBody(req);
+        const { pattern, limit } = body;
+        if (!pattern) { json(res, { error: 'pattern required' }, 400); return; }
+        const matches = grepHtml(String(pattern), engine.htmlPath, engine._articles, parseInt(limit || '15', 10));
+        json(res, { matches });
+        return;
+      }
+
+      // POST /read — full memory by sessionId (summary text, e.g. "chunk 7") or node id
+      if (path === '/read' && req.method === 'POST') {
+        const body = await readBody(req);
+        const { sessionId } = body;
+        if (!sessionId) { json(res, { error: 'sessionId required' }, 400); return; }
+        let targetId = null;
+        const want = String(sessionId).trim();
+        for (const [id, node] of engine._articles) {
+          if (id === want || (node.summary || '').trim() === want) { targetId = id; break; }
+        }
+        if (!targetId) { json(res, { error: 'not found' }, 404); return; }
+        const node = await engine.focus(targetId);
+        json(res, node);
+        return;
+      }
+
       res.writeHead(404);
       res.end(JSON.stringify({ error: 'not found' }));
 
@@ -158,6 +191,67 @@ async function main() {
 function json(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
+}
+
+// Raw regex grep over the memory HTML, mapping each matching line to its
+// owning article. sessionId = article summary ("chunk N" under MAB ingestion).
+function grepHtml(pattern, htmlPath, articles, limit = 15) {
+  if (!existsSync(htmlPath)) return [];
+  let raw;
+  try {
+    raw = execFileSync('rg', [
+      '-n', '--no-heading', '-i',
+      '--max-count', String(limit * 3),
+      '-e', pattern,
+      htmlPath,
+    ], { encoding: 'utf-8', timeout: 5000, maxBuffer: 5 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch (e) {
+    if (e.status === 1 || e.status === 2) return [];
+    throw e;
+  }
+
+  const lines = readFileSync(htmlPath, 'utf8').split('\n');
+  const ranges = new Map();
+  let curId = null, curStart = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const open = lines[i].match(/<article\s+[^>]*id="([^"]+)"/);
+    if (open) { curId = open[1]; curStart = i + 1; }
+    if (curId && lines[i].includes('</article>')) { ranges.set(curId, { start: curStart, end: i + 1 }); curId = null; }
+  }
+  const idToSession = new Map();
+  for (const [id, node] of articles) idToSession.set(id, (node.summary || '').trim());
+
+  const seen = new Set();
+  const out = [];
+  for (const line of raw.split('\n')) {
+    const m = line.match(/^(\d+):(.*)$/);
+    if (!m) continue;
+    const lineNum = parseInt(m[1]);
+    const text = m[2];
+    const trimmed = text.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('<article ') || trimmed.startsWith('</article') ||
+        trimmed.startsWith('<!-- ') || trimmed.startsWith('<!') ||
+        trimmed.startsWith('<html') || trimmed.startsWith('<head') ||
+        trimmed.startsWith('<meta ') || trimmed.startsWith('<title>') ||
+        trimmed.startsWith('<style') || trimmed.startsWith('</style') ||
+        trimmed.startsWith('<body') || trimmed.startsWith('</body') ||
+        trimmed.startsWith('</html') || trimmed.startsWith('<h1>') ||
+        trimmed.startsWith('<h2>') || trimmed.startsWith('<ul class="triggers"') ||
+        trimmed.startsWith('<nav class="edges"') || trimmed.startsWith('<p class="detail"')) continue;
+    let ownerArticle = null;
+    for (const [aid, r] of ranges) {
+      if (lineNum >= r.start && lineNum <= r.end) { ownerArticle = aid; break; }
+    }
+    if (!ownerArticle) continue;
+    const session = idToSession.get(ownerArticle);
+    if (!session) continue;
+    if (seen.has(session + ':' + lineNum)) continue;
+    seen.add(session + ':' + lineNum);
+    out.push({ sessionId: session, id: ownerArticle, line: lineNum, text: trimmed.slice(0, 250) });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 function readBody(req) {
