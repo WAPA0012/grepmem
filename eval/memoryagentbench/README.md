@@ -107,6 +107,44 @@ Also observed: the synonym learner is stateful across queries in one namespace, 
 order-dependent (two identical replays differed by 9/300 queries). For batch evaluation, isolate
 namespaces per history or disable the learner.
 
+## Optimization iteration: v2 → v2g (what transfers and what doesn't)
+
+Following the attribution above, we added three literature-backed layers and measured them
+across the full suite (uniform config, no dataset labels):
+
+1. **Session reconstruction** — split the chunk stream on `Chat Time:` markers into whole-session
+   nodes with parsed timestamps (content-triggered at ≥3 markers; LongMemEval-native granularity,
+   Zep/MemOS-style temporal binding).
+2. **BM25 + RRF fusion** (k=60) of the loop ranking with BM25 over the same nodes (hybrid
+   retrieval standard; our measured BM25 top-10 gold coverage was +20pt over single-pass grep
+   on conversational text).
+3. **Chain-of-Note / quote-recency answering** — date-prefixed memory blocks, brief notes then
+   `Answer:` line, verbatim quoting for preference questions, latest-date wins on conflicts
+   (LongMemEval authors report +10pt from structured reading prompts).
+
+**Result on LongMemEval-S\*: 34.7% → 48.3% (v2 global) → 49.3% (v2g)** — beating the BM25
+baseline (41.3%) by 7pt. Per-type gains vs v1: knowledge-update 42.2→64.4, multi-session
+22.7→45.3, temporal 25.3→40.0, single-session-user 64.4→75.6. single-session-preference stays
+0/30 for every system including BM25: gold answers are annotator-derived statements not present
+verbatim in the haystack — structurally unanswerable under substring scoring.
+
+**But the fusion stack transfers negatively to synthetic exact-match corpora** (uniform v2,
+Δ vs v1): RULER-q1 **−16**, factconsolidation-mh-6k **−23**, sh −4…−7, ICL −6…−9. On needle
+corpora, grep's exact-token channels are already optimal and BM25's tf-idf ranking dilutes
+them in the RRF merge. Query-weighted, global v2 is net-negative across the suite.
+
+**v2g (final): content-gated.** The fusion + CoN answering stack activates only when session
+markers were detected (conversational corpora); everything else falls back to the v1 path
+byte-for-byte. Zero dataset labels — pure content adaptation. Final numbers:
+**LongMemEval-S\* 49.3% official / 49.8% answered-only (3/300 empty)** with all other configs
+keeping their v1 scores above.
+
+| | LME-S\* official | notes |
+|---|---|---|
+| BM25 baseline (same generator/scoring) | 41.3 | single-shot retrieve top-10 |
+| grepmem v1 (agent loop) | 34.7 | loop +2.7pt over single-shot 32% coverage |
+| **grepmem v2g (final)** | **49.3** | + sessions+timestamps, BM25 RRF, CoN answering |
+
 ## step_plan gateway content filter
 
 Answering EventQA (detective/crime novels) through `api.stepfun.com/step_plan/v1` triggers
