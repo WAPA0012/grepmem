@@ -164,6 +164,14 @@ adaptive-reformulation value retained — the sequential loop's own data (T=4 al
 should not be used as a programmatic stop criterion: they are not comparable across queries.
 Untested here — flagged for future work.
 
+Refinement: let the planner **self-allocate its round budget** (1-N) and batch size (3 probes
+for entity-lookup questions, 8-10 for temporal/multi-session ones) — the Adaptive-RAG pattern
+of routing by question complexity. Two guards: the budget is a request, not a verdict (poor
+round-1 evidence escalates regardless of self-assessment, since models systematically
+under-estimate difficulty), and parallel probes overlap heavily (on LME, an original query plus
+3 rewrites recovered only 2-3 additional gold hits), so effective coverage grows sub-linearly
+with batch size — diversification strategy matters more than batch count.
+
 ## step_plan gateway content filter
 
 Answering EventQA (detective/crime novels) through `api.stepfun.com/step_plan/v1` triggers
