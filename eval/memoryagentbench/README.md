@@ -145,6 +145,25 @@ keeping their v1 scores above.
 | grepmem v1 (agent loop) | 34.7 | loop +2.7pt over single-shot 32% coverage |
 | **grepmem v2g (final)** | **49.3** | + sessions+timestamps, BM25 RRF, CoN answering |
 
+## Future direction: batched adaptive retrieval
+
+The agent loop used here is sequential: one probe per LLM decision, up to 10 rounds. A more
+efficient shape — especially for single-Search protocols like the Agent Memory Leaderboard,
+where the entire retrieval must live inside one endpoint call — is **batched rounds**:
+
+1. One planner call emits a diverse probe set (recall rewrites, grep patterns, read-to-verify
+   candidates) executed together.
+2. A fused evaluate-and-plan call per subsequent round sees the previous round's results and
+   outputs either the final selection or the next probe batch.
+3. Stop conditions: model-decided final output, convergence (next batch mostly re-surfaces
+   already-seen nodes), or a small round cap (2-3).
+
+Expected effect: ~2-3 LLM calls per query on average (vs 5-8 here) with most of the loop's
+adaptive-reformulation value retained — the sequential loop's own data (T=4 already reaches
+86.7% of the T=10 score) suggests the first few probes carry most of the signal. Match scores
+should not be used as a programmatic stop criterion: they are not comparable across queries.
+Untested here — flagged for future work.
+
 ## step_plan gateway content filter
 
 Answering EventQA (detective/crime novels) through `api.stepfun.com/step_plan/v1` triggers
