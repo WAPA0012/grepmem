@@ -18,43 +18,39 @@ StepFun `step_plan` gateway that affects reproducibility (see [§451](#step_plan
 | LongMemEval-S* E2E | **34.7% official / 36.6% answered-only** — see [attribution](#longmemeval-s-why-e2e-is-harder-than-r5) |
 | grepmem's published 98.9% | R@5 **retrieval** recall on whole sessions — a different protocol, not contradicted |
 
-## Results (official / answered-only)
+## Results (final; official / answered-only)
 
-`official` = substring_exact_match over all queries. `answered-only` = hits ÷ (n − empty outputs);
-empty outputs are queries where answer generation was blocked by the endpoint content filter
-(see §451) — they say nothing about retrieval quality.
+All 22 configs, one system (gpm_v2g), one code version, clean-load runs. `empty` = queries with
+no generated answer after all rescue tiers.
 
 | Config | n | official | answered-only | empty |
 |---|---|---|---|---|
-| factconsolidation-sh-6k | 100 | **97.0** | 98.0 | 1 |
-| ruler_qa1-197K | 100 | **93.0** | 93.9 | 1 |
+| factconsolidation-sh-6k | 100 | **98.0** | 98.0 | 0 |
+| eventqa-64k | 500 | **94.2** | 96.9 | 14 |
+| ruler_qa1-197K | 100 | **94.0** | 95.9 | 2 |
+| icl_clinic150 | 100 | **92.0** | 96.8 | 5 |
+| eventqa-128k | 500 | **90.4** | 94.0 | 19 |
+| icl_banking77 | 100 | **88.0** | 92.6 | 5 |
 | factconsolidation-sh-32k | 100 | **91.0** | 94.8 | 4 |
-| icl_banking77 | 100 | **90.0** | 96.8 | 7 |
-| eventqa-64k | 500 | 88.6 | **98.4** | 50 |
-| factconsolidation-sh-64k | 100 | 88.0 | 91.7 | 4 |
-| icl_clinic150 | 100 | 84.0 | 94.4 | 11 |
-| eventqa-128k | 500 | 82.6 | **96.5** | 72 |
-| icl_nlu | 100 | 76.0 | 90.5 | 16 |
-| ruler_qa2-421K | 100 | 76.0 | 76.8 | 1 |
-| factconsolidation-mh-6k | 100 | 70.0 | 76.9 | 9 |
-| eventqa-full | 500 | 55.2 | **87.9** | 186 |
-| detective-qa | 71 | 49.3 | 85.4 | 30 |
-| icl_trec_coarse | 100 | 37.0 | **84.1** | 56 |
-| **longmemeval-s\*** | 300 | **34.7** | 36.6 | 16 |
-| icl_trec_fine | 100 | 31.0 | 72.1 | 57 |
-| factconsolidation-mh-32k | 100 | 34.0 | 49.3 | 31 |
-| factconsolidation-mh-64k | 100 | 22.0 | 32.4 | 32 |
-| factconsolidation-mh-262k | 100 | 15.0 | 34.9 | 57 |
-| infbench-sum | 100 | 0.0\* | — | 33 |
+| icl_nlu | 100 | **85.0** | 87.6 | 3 |
+| factconsolidation-sh-64k | 100 | 86.0 | 92.5 | 7 |
+| factconsolidation-sh-262k | 100 | 82.0 | 86.3 | 5 |
+| icl_trec_coarse | 100 | **80.0** | 92.0 | 13 |
+| eventqa-full | 500 | 74.8 | 79.6 | 30 |
+| ruler_qa2-421K | 100 | 72.0 | 73.5 | 2 |
+| factconsolidation-mh-6k | 100 | 69.0 | 75.8 | 9 |
+| icl_trec_fine | 100 | 57.0 | 65.5 | 13 |
+| detective-qa | 71 | 59.2 | 70.0 | 11 |
+| **longmemeval-s\*** | 300 | **49.3** | 49.8 | 3 |
+| factconsolidation-mh-64k | 100 | 20.0 | 20.6 | 3 |
+| factconsolidation-mh-32k | 100 | 23.0 | 23.7 | 3 |
+| factconsolidation-mh-262k | 100 | 13.0 | 14.3 | 9 |
+| infbench-sum | 100 | 0.0* | — | 2 |
+| recsys | 200 | 0.0* | — | 10 |
 
-\* substring metric is not applicable to summarization; rougeL-f1 = 10.5 (compare against
-same-task baselines only). `recsys_redial` was not run (requires an entity-mapping asset not
-present in the local data bundle).
-
-LongMemEval-S* per question type: single-session-assistant 66.7%, single-session-user 64.4%,
-knowledge-update 42.2%, temporal-reasoning 25.3%, multi-session 22.7%, single-session-preference 0.0%
-(gold answers are long derived statements; substring scoring requires near-verbatim reproduction,
-which concise-answer prompts never produce — an answering-layer artifact, not retrieval failure).
+\* metric not applicable (summarization needs F1/judge; recsys needs Recall@5). Multi-hop conflict
+resolution (FC-MH) is the honest weak spot: rescuing empty outputs converted them to answers but
+not to correct ones — capability boundary, not infrastructure.
 
 ## Setup
 
@@ -186,9 +182,28 @@ HTTP 451 `{'type': 'censorship_blocked'}` at scale. Controlled experiments:
 - Endpoint-specific: the identical payload passes on `api.stepfun.com/v1` (separate pay-as-you-go
   quota; the Step Plan subscription does not cover it).
 
-Impact: official scores on eventqa-full/128k and the trec pair are suppressed 20–50 pt
-(the `empty` column); answered-only scores reflect retrieval quality. Synthetic-text tasks
-(RULER, factconsolidation) never trigger it.
+Impact and revision: initial analysis blamed the filter for most empty outputs; systematic
+re-census showed **account-level sustained load is the dominant lever** (cutting concurrent
+external API usage 3/4 took a payload that failed 6/6 to passing 6/6) while content sets the
+susceptibility baseline (synthetic RULER/factconsolidation text never triggers it, crime-novel
+EventQA does). Official scores on novel-text tasks carry a small residual suppression; the
+answered-only column isolates retrieval quality.
+
+## Generator failure modes (StepFun step-3.7-flash)
+
+Two infrastructure failure modes caused most empty outputs until fixed; both are relevant to
+anyone evaluating through this endpoint:
+
+1. **`enable_thinking: false` is silently ignored on large contexts.** On a 38K-token prompt the
+   model enters a deterministic thinking loop — >64k reasoning tokens, `content` never starts,
+   any `max_tokens` budget is exhausted (2k/16k/32k/64k all finish=length, content empty). It
+   works fine on small prompts, which makes it easy to misdiagnose.
+2. **Two-tier rescue (verified):** retry with `reasoning_effort: "low"` bounds reasoning for
+   most cases (thinking drops to ~2-5k, finish=stop); queries stuck in a pathological attractor
+   escape with `temperature: 0.7` (sampling breaks the loop; rescued answers verified correct).
+   Effect on this suite: ICL-trec-coarse 31→80, nlu 71→85, trec-fine 35→57, empty outputs
+   417→172. Multi-hop factconf answers were rescued to *answers* but not to *correct* answers —
+   a capability boundary of the task, not the rescue.
 
 ## Reproduce
 
