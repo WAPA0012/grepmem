@@ -25,7 +25,8 @@
 
 class GpmAgentMixin:
     """Drop-in mixin for MemoryAgentBench agent.AgentWrapper.
-    Includes the v2g content-gated optimization stack (see README §Optimization)."""
+    Final form: v2g content-gated stack + 451-aware retry + two-tier thinking-rescue
+    (reasoning_effort=low, then temperature 0.7). See README §Generator failure modes."""
 
     # ── grepmem agent-as-retriever loop (ported from eval/longmemeval-s-agent.mjs) ──
 
@@ -478,8 +479,8 @@ List the ones you've verified first, then unverified candidates."""
                         model=self.model,
                         messages=format_message,
                         temperature=self.temperature,
-                        max_tokens=6000,
-                        timeout=240,
+                        max_tokens=16000,
+                        timeout=480,
                         extra_body={"enable_thinking": False},
                     )
                 except Exception as e:
@@ -487,19 +488,37 @@ List the ones you've verified first, then unverified candidates."""
             if response is not None:
                 answer = response.choices[0].message.content
                 if not answer:
-                    # thinking still overran: retry once with a large budget
+                    # enable_thinking=False is IGNORED by the endpoint on large
+                    # contexts: the model enters a deterministic thinking loop
+                    # (>64k tokens, content never starts). Tier A: bound the
+                    # reasoning with reasoning_effort=low. Tier B: sampling
+                    # (temp 0.7) breaks the loop attractor. Both verified to
+                    # return correct answers on rescued queries.
                     try:
                         retry = self._gpm_llm_call(
                             model=self.model,
                             messages=format_message,
                             temperature=self.temperature,
-                            max_tokens=6000,
-                            timeout=240,
-                            extra_body={"enable_thinking": False},
+                            max_tokens=16000,
+                            timeout=480,
+                            extra_body={"enable_thinking": False, "reasoning_effort": "low"},
                         )
                         answer = retry.choices[0].message.content or ""
                     except Exception:
                         answer = ""
+                    if not answer:
+                        try:
+                            retry2 = self._gpm_llm_call(
+                                model=self.model,
+                                messages=format_message,
+                                temperature=0.7,
+                                max_tokens=16000,
+                                timeout=480,
+                                extra_body={"enable_thinking": False, "reasoning_effort": "low"},
+                            )
+                            answer = retry2.choices[0].message.content or ""
+                        except Exception:
+                            answer = ""
                 in_tok, out_tok = response.usage.prompt_tokens, response.usage.completion_tokens
             else:
                 answer, in_tok, out_tok = "", 0, 0
