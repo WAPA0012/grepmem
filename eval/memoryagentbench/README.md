@@ -1,7 +1,7 @@
 # grepmem on MemoryAgentBench — End-to-End Evaluation
 
 Independent end-to-end (E2E) evaluation of grepmem on **MemoryAgentBench** (MAB, ICLR 2026,
-[arXiv 2507.05257](https://arxiv.org/abs/2507.05257)): **22 task configurations, 3,671 queries**,
+[arXiv 2507.05257](https://arxiv.org/abs/2507.05257)): **21 task configurations, 3,671 queries**,
 using grepmem's own agent-as-retriever configuration (MAX_TURNS=10, three tools, hard-rules prompt,
 per-type tips) as the retrieval layer.
 
@@ -13,9 +13,9 @@ StepFun `step_plan` gateway that affects reproducibility (see [§451](#step_plan
 
 | Task family | Result |
 |---|---|
-| Lexical-hit tasks (RULER, EventQA, ICL, FC-SH) | **69–98% official** (RULER-q1 94, EventQA-64k 94.2, ICL up to 92, FC-SH up to 98) — grep retrieval is top-tier |
-| Multi-hop conflict resolution (FC-MH) | 13–69%, degrades with context length — an honest capability boundary |
-| LongMemEval-S* E2E | **49.3% official / 49.8% answered-only** after the v2g optimization stack (v1 baseline 34.7%) — beats the same-generator BM25 (41.3%); see [attribution](#longmemeval-s-why-e2e-is-harder-than-r5) |
+| Lexical-hit tasks (RULER, EventQA, ICL, FC-SH) | **76–97% official, up to 98% answered-only** — grep retrieval is top-tier |
+| Multi-hop conflict resolution (FC-MH) | 15–70%, degrades with context length — needs cross-fact reasoning |
+| LongMemEval-S* E2E | **34.7% official / 36.6% answered-only** — see [attribution](#longmemeval-s-why-e2e-is-harder-than-r5) |
 | grepmem's published 98.9% | R@5 **retrieval** recall on whole sessions — a different protocol, not contradicted |
 
 ## Results (final; official / answered-only)
