@@ -270,7 +270,8 @@ curl -X POST http://localhost:18234/recall \
 <ul>
 <li><strong>Shipped</strong>: HTML storage, grep retrieval, fail-improve loop, dual-layer knowledge/conversation, MCP server with 6 tools (recall / read / list / store / grep / find_symbol).</li>
 <li><strong>Shipped</strong>: Agent-as-retriever benchmark — LongMemEval-S R@5 = 98.9% on full 500 questions.</li>
-<li><strong>Next</strong>: End-to-end QA evaluation on LongMemEval (retrieve → answer → judge), so the project has a comparable accuracy number alongside the retrieval number.</li>
+<li><strong>Shipped</strong>: End-to-end evaluation on <a href="eval/memoryagentbench/README.md">MemoryAgentBench</a> — 22 task configs / 3,671 queries. LongMemEval-S* 49.3% (beats the same-generator BM25 baseline 41.3%); full attribution, generator failure-mode findings, and step_plan content-filter analysis.</li>
+<li><strong>Next</strong>: Batched adaptive retrieval — collapse the sequential 10-round loop into 2–3 parallel probe rounds with self-allocated budgets (Adaptive-RAG style); ~2–3 LLM calls per query, and the right shape for single-Search protocols like the Agent Memory Leaderboard.</li>
 <li><strong>Next</strong>: Cross-benchmark validation — run the same agent harness on LoCoMo and ConvoMem to confirm the pattern generalizes beyond LongMemEval.</li>
 <li><strong>Later</strong>: Lightweight write-time fact extraction (optional, off by default) — a compromise that captures the 2 missed questions without making zero-ingestion-LLM the default mode.</li>
 <li><strong>Later</strong>: Production dogfooding — wire the MCP server into Claude Code / Cursor for real-world daily use and measure recall latency / hit rate on actual user queries.</li>
