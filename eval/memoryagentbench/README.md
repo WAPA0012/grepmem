@@ -214,3 +214,9 @@ anyone evaluating through this endpoint:
 
 Query-level checkpointing is built into MAB; delete a config's `*results.json` before re-running
 it from scratch (`--force` does not bypass per-query resume).
+
+## Raw results
+
+`results/gpm_v2g_final_results.tar.gz` — the 22 result JSONs backing every number in the
+table above (per-query outputs, answers, timings, token counts). Scoring is reproducible with
+MemoryAgentBench's own metrics code against these files.
