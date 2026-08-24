@@ -3,7 +3,7 @@
 > Vectorless agent memory. HTML on disk, grep at retrieval. The just-in-time context loading pattern, applied to the agent's own memory.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-**LongMemEval-S: R@5 = 98.9%** • Zero embeddings • Zero vector DB • Zero ingestion LLM
+**LongMemEval-S: R@5 = 98.9% · MAB E2E: LME-S\* 49.3%** • Zero embeddings • Zero vector DB • Zero ingestion LLM
 
 An external memory store for AI agents. Memory lives on disk as **HTML files**. The agent queries them with **grep**. No embedding model. No vector database. No ingestion LLM calls.
 
@@ -258,6 +258,9 @@ node examples/basic-usage.mjs
 | POST | `/remove` | Delete `{ nodeId }` |
 | POST | `/link` | Link memories `{ source, target, strength? }` |
 | GET | `/stats` | Node/edge counts |
+| POST | `/grep` | Raw regex grep `{ pattern, limit? }` — line-level matches mapped to owning articles |
+| POST | `/read` | Fetch one memory by summary label or id `{ sessionId }` |
+| POST | `/reset` | Wipe all data |
 | GET | `/health` | Health check |
 
 ## Wire into Claude Code
