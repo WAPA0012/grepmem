@@ -250,6 +250,9 @@ curl -X POST http://localhost:18234/recall \
 <tr><td>POST</td><td><code>/remove</code></td><td>Delete { nodeId }</td></tr>
 <tr><td>POST</td><td><code>/link</code></td><td>Link memories { source, target }</td></tr>
 <tr><td>GET</td><td><code>/stats</code></td><td>Node/edge counts</td></tr>
+<tr><td>POST</td><td><code>/grep</code></td><td>Raw regex grep <code>{ pattern, limit? }</code> — line-level matches mapped to owning articles</td></tr>
+<tr><td>POST</td><td><code>/read</code></td><td>Fetch one memory by summary label or id <code>{ sessionId }</code></td></tr>
+<tr><td>POST</td><td><code>/reset</code></td><td>Wipe all data</td></tr>
 <tr><td>GET</td><td><code>/health</code></td><td>Health check</td></tr>
 </table>
 
