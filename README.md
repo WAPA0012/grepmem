@@ -170,6 +170,32 @@ If you need to reproduce benchmark-style results in production, run the same mul
 
 ---
 
+## End-to-end evaluation — MemoryAgentBench
+
+Retrieval recall is necessary but not sufficient. We also ran the full **MemoryAgentBench**
+(MAB, ICLR 2026) end-to-end: 22 task configurations, 3,671 queries, retrieve → generate →
+substring-match scoring, same generator as the BM25 baseline. Full report with attribution,
+generator failure modes, and raw results: [eval/memoryagentbench/](eval/memoryagentbench/README.md).
+
+| Task family | Score (official / answered-only) |
+|---|---|
+| RULER needle-in-haystack (197K / 421K) | **94.0 / 95.9** · 72.0 / 73.5 |
+| EventQA narrative QA (64K / 128K / full) | **94.2 / 96.9** · 90.4 / 94.0 · 74.8 / 79.6 |
+| ICL test-time learning (5 datasets) | 57–92 official (BM25 baseline: 75.4 avg) |
+| Fact consolidation, single-hop (4 sizes) | 82–**98** |
+| LongMemEval-S\* | **49.3 / 49.8** — vs BM25 41.3 (same generator/scoring); 34.7 before the v2g stack |
+| Fact consolidation, multi-hop | 13–69 — the honest weak spot |
+
+The LongMemEval number carries the most engineering insight: 98.9% R@5 retrieval does not
+translate to E2E accuracy through MAB's protocol (4096-token chunked ingestion, short-form
+substring scoring). Recovering it took three content-triggered upgrades — whole-session
+reconstruction with parsed timestamps, BM25+RRF fusion, Chain-of-Note answering — which
+together moved LME-S\* from 34.7% to 49.3%, past the BM25 baseline. The same fusion stack
+*hurts* synthetic exact-match corpora by 3–23pt, so it activates only when session markers
+are detected in the content (no dataset labels). Details and raw data in the report.
+
+---
+
 ## Quick start
 
 ```bash

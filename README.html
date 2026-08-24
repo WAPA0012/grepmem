@@ -219,6 +219,20 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #d0d7de; col
 
 
 
+<h2>End-to-end evaluation — MemoryAgentBench</h2>
+<p>Retrieval recall is necessary but not sufficient. We also ran the full <strong>MemoryAgentBench</strong> (MAB, ICLR 2026) end-to-end: 22 task configurations, 3,671 queries, retrieve → generate → substring-match scoring, same generator as the BM25 baseline. Full report with attribution, generator failure modes, and raw results: <a href="eval/memoryagentbench/README.md">eval/memoryagentbench/</a>.</p>
+<table>
+<thead><tr><th>Task family</th><th>Score (official / answered-only)</th></tr></thead>
+<tbody>
+<tr><td>RULER needle-in-haystack (197K / 421K)</td><td><strong>94.0 / 95.9</strong> · 72.0 / 73.5</td></tr>
+<tr><td>EventQA narrative QA (64K / 128K / full)</td><td><strong>94.2 / 96.9</strong> · 90.4 / 94.0 · 74.8 / 79.6</td></tr>
+<tr><td>ICL test-time learning (5 datasets)</td><td>57–92 official (BM25 baseline: 75.4 avg)</td></tr>
+<tr><td>Fact consolidation, single-hop (4 sizes)</td><td>82–<strong>98</strong></td></tr>
+<tr><td>LongMemEval-S*</td><td><strong>49.3 / 49.8</strong> — vs BM25 41.3 (same generator/scoring); 34.7 before the v2g stack</td></tr>
+<tr><td>Fact consolidation, multi-hop</td><td>13–69 — the honest weak spot</td></tr>
+</tbody>
+</table>
+<p>The LongMemEval number carries the most engineering insight: 98.9% R@5 retrieval does not translate to E2E accuracy through MAB's protocol (4096-token chunked ingestion, short-form substring scoring). Recovering it took three content-triggered upgrades — whole-session reconstruction with parsed timestamps, BM25+RRF fusion, Chain-of-Note answering — which together moved LME-S* from 34.7% to 49.3%, past the BM25 baseline. The same fusion stack <em>hurts</em> synthetic exact-match corpora by 3–23pt, so it activates only when session markers are detected in the content (no dataset labels).</p>
 <h2>Quick Start</h2>
 
 <pre>
